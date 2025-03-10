@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="images/logo.png" alt="Alt text" width="700">
+  <img src="images/logo.png" alt="DATADRAGON logo">
 </p>
 
 Deep within the vaults of your Salesforce org, **DataDragon** slumbers — until someone dares to touch the treasure. With smoke curling from its nostrils and a keen eye for intruders, DataDragon helps security teams investigate user activity by analyzing event logs for suspicious patterns.
