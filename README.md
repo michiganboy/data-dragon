@@ -260,8 +260,6 @@ datadragon/
 ├── models/                   # Data models
 │   ├── log.js                # Log processing model
 │   └── userActivity.js       # User activity and risk assessment
-├── routes/                   # Express routes
-│   └── auth.js               # Authentication routes
 └── output/                   # Output directories
     ├── tokens.json           # Authentication tokens
     ├── summary-report.json   # JSON report
