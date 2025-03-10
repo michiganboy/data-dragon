@@ -1,0 +1,40 @@
+{
+  "name": "data-dragon",
+  "version": "1.0.0",
+  "description": "DataDragon - Guardian of the Salesforce Hoard, a security monitoring tool for Salesforce EventLogFiles",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "debug": "node index.js --debug",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "wake": "node index.js",
+    "wake-dragon": "node index.js"
+  },
+  "keywords": [
+    "salesforce",
+    "security",
+    "monitoring",
+    "event-log",
+    "data-protection"
+  ],
+  "author": "James Hartley",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.5.0",
+    "boxen": "^5.1.2",
+    "chalk": "^4.1.2",
+    "csv-parser": "^3.0.0",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2"
+  },
+  "bin": {
+    "wake-dragon": "./index.js"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jameshartley/data-dragon"
+  }
+}
