@@ -80,7 +80,7 @@ function detectRapidAccess(
 const riskConfig = {
   ReportExport: {
     description: "Report Export Detected",
-    threshold: 1, // Every instance is tracked
+    threshold: 3, // Every instance is tracked
     severity: "high",
     rationale: "Direct path to data exfiltration",
     countField: null,
@@ -98,7 +98,7 @@ const riskConfig = {
   },
   DocumentAttachmentDownloads: {
     description: "Excessive Attachment Downloads",
-    threshold: 10,
+    threshold: 20,
     severity: "high",
     rationale: "Bulk downloading indicates potential data theft",
     countField: null,
@@ -122,7 +122,7 @@ const riskConfig = {
   },
   ContentDocumentLink: {
     description: "Excessive Internal Sharing",
-    threshold: 10,
+    threshold: 20,
     severity: "medium",
     rationale:
       "Excessive internal sharing may indicate staging for exfiltration",
@@ -169,7 +169,7 @@ const riskConfig = {
 
       // If we've exceeded threshold and have entity info
       if (
-        tracking.sharedDocuments.size >= 10 &&
+        tracking.sharedDocuments.size >= 20 &&
         tracking.sharedEntities.size > 0
       ) {
         // Format a readable sharing summary
@@ -196,7 +196,7 @@ const riskConfig = {
   },
   ContentDistribution: {
     description: "Public Sharing Activity",
-    threshold: 5,
+    threshold: 10,
     severity: "critical",
     rationale: "Public shares pose significant data exposure risk",
     countField: null,
@@ -214,7 +214,7 @@ const riskConfig = {
   },
   Login: {
     description: "Multiple IP Logins",
-    threshold: 3,
+    threshold: 5,
     severity: "high",
     rationale: "Could indicate compromised credentials",
     countField: "CLIENT_IP",
@@ -252,7 +252,7 @@ const riskConfig = {
   },
   LoginAs: {
     description: "Admin Impersonation",
-    threshold: 1,
+    threshold: 3,
     severity: "high",
     rationale: "Admin impersonation always warrants review",
     countField: null,
@@ -269,7 +269,7 @@ const riskConfig = {
   },
   Sites: {
     description: "Internal Access via Guest User",
-    threshold: 1,
+    threshold: 3,
     severity: "high",
     rationale: "May indicate misuse of public access",
     countField: null,
@@ -292,7 +292,7 @@ const riskConfig = {
   },
   Search: {
     description: "Excessive Search Activity",
-    threshold: 50,
+    threshold: 100,
     severity: "medium",
     rationale: "Bulk recon activity",
     countField: null,
@@ -316,7 +316,7 @@ const riskConfig = {
         "SESSION_KEY",
         "USER_ID_DERIVED",
         3,
-        8
+        15
       );
       if (rapidAccessDetection) {
         return rapidAccessDetection;
@@ -327,7 +327,7 @@ const riskConfig = {
   },
   ApexCallout: {
     description: "High Volume External Callouts",
-    threshold: 20,
+    threshold: 30,
     severity: "high",
     rationale: "May indicate external data exfiltration",
     countField: "ENDPOINT_URL", // Track unique endpoints
@@ -351,7 +351,7 @@ const riskConfig = {
   },
   VisualforceRequest: {
     description: "Possible Page Scraping",
-    threshold: 30,
+    threshold: 75,
     severity: "medium",
     rationale: "Possible scraping or automation",
     countField: "PAGE_NAME",
@@ -363,8 +363,8 @@ const riskConfig = {
         "Visualforce Page",
         "SESSION_KEY",
         "USER_ID_DERIVED",
-        2,
-        10
+        0.5,
+        20
       );
       if (rapidAccessDetection) {
         return rapidAccessDetection;
@@ -382,7 +382,7 @@ const riskConfig = {
   },
   AuraRequest: {
     description: "Excessive Component Loading",
-    threshold: 30,
+    threshold: 75,
     severity: "medium",
     rationale: "Possible scraping or automation (Lightning specific)",
     countField: "COMPONENT_NAME",
@@ -394,8 +394,8 @@ const riskConfig = {
         "Lightning Component",
         "SESSION_KEY",
         "USER_ID_DERIVED",
-        1.5,
-        15
+        0.5,
+        25
       );
       if (rapidAccessDetection) {
         return rapidAccessDetection;
@@ -406,7 +406,7 @@ const riskConfig = {
   },
   LightningPageView: {
     description: "Unusual Page View Volume",
-    threshold: 50,
+    threshold: 100,
     severity: "medium",
     rationale: "Recon or bulk record viewing",
     countField: "PAGE_ENTITY_TYPE",
@@ -418,8 +418,8 @@ const riskConfig = {
         "Lightning Page",
         "SESSION_KEY",
         "USER_ID_DERIVED",
-        2.5,
-        12
+        0.5,
+        25
       );
       if (rapidAccessDetection) {
         return rapidAccessDetection;
@@ -430,7 +430,7 @@ const riskConfig = {
   },
   Dashboard: {
     description: "Multiple Dashboard Access",
-    threshold: 5,
+    threshold: 15,
     severity: "medium",
     rationale: "Unusual recon or data collection",
     countField: "DASHBOARD_ID",
@@ -443,7 +443,7 @@ const riskConfig = {
         "SESSION_KEY",
         "USER_ID_DERIVED",
         5,
-        5
+        10
       );
       if (rapidAccessDetection) {
         return rapidAccessDetection;
@@ -454,7 +454,7 @@ const riskConfig = {
   },
   AsyncReportRun: {
     description: "Background Reports",
-    threshold: 10,
+    threshold: 15,
     severity: "high",
     rationale: "Data staging for later extraction",
     countField: null,
@@ -462,7 +462,7 @@ const riskConfig = {
   },
   FlowExecution: {
     description: "Manual Flow Trigger",
-    threshold: 1,
+    threshold: 3,
     severity: "high",
     rationale: "Direct process manipulation",
     countField: "FLOW_NAME",
@@ -491,7 +491,7 @@ const riskConfig = {
   },
   ApexExecution: {
     description: "Direct Apex Execution",
-    threshold: 1,
+    threshold: 3,
     severity: "critical",
     rationale: "Possible direct manipulation or abuse",
     countField: "APEX_CLASS_NAME",
@@ -514,7 +514,7 @@ const riskConfig = {
   },
   ApexTriggerExecution: {
     description: "Apex Trigger Spike",
-    threshold: 100,
+    threshold: 150,
     severity: "medium",
     rationale: "Unusual mass-trigger events",
     countField: "TRIGGER_NAME",
@@ -523,7 +523,7 @@ const riskConfig = {
   // New expanded risk types
   ApiAnomalyEventStore: {
     description: "API Anomaly Detected",
-    threshold: 1,
+    threshold: 3,
     severity: "critical",
     rationale: "Salesforce detected platform anomaly",
     countField: null,
@@ -539,7 +539,7 @@ const riskConfig = {
   },
   BulkApiRequest: {
     description: "Bulk API Usage",
-    threshold: 3,
+    threshold: 10,
     severity: "medium",
     rationale: "Mass data operations through API",
     countField: "OPERATION_TYPE",
@@ -557,7 +557,7 @@ const riskConfig = {
   },
   PermissionSetAssignment: {
     description: "Permission Changes",
-    threshold: 1,
+    threshold: 3,
     severity: "high",
     rationale: "Permission changes could indicate privilege escalation",
     countField: null,
@@ -580,7 +580,7 @@ const riskConfig = {
   },
   LightningError: {
     description: "Unusual Error Rate",
-    threshold: 20,
+    threshold: 30,
     severity: "medium",
     rationale: "High error rates may indicate attempted exploitation",
     countField: "ERROR_TYPE",
@@ -588,7 +588,7 @@ const riskConfig = {
   },
   LogoutEvent: {
     description: "Unusual Logout Pattern",
-    threshold: 10,
+    threshold: 15,
     severity: "low",
     rationale: "Excessive login/logout cycles may indicate session harvesting",
     countField: null,
@@ -596,7 +596,7 @@ const riskConfig = {
   },
   DataExport: {
     description: "Organization Data Export",
-    threshold: 1,
+    threshold: 3,
     severity: "critical",
     rationale: "Complete org data extraction",
     countField: null,
