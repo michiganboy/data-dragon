@@ -37,34 +37,63 @@ class UserActivity {
     if (!loginRecords || !Array.isArray(loginRecords)) return;
 
     loginRecords.forEach((record) => {
+      // Get standardized fields - prioritize TIMESTAMP_DERIVED for Salesforce event logs
+      const timestamp = utils.getStandardizedField(
+        record,
+        ["TIMESTAMP_DERIVED", "LoginTime", "LOGIN_TIME", "TIMESTAMP"],
+        null
+      );
+
       // Extract date and time
-      if (record.LoginTime) {
-        const loginDate = new Date(record.LoginTime);
-        const dateStr = loginDate.toISOString().split("T")[0];
+      if (timestamp) {
+        // Handle ISO format timestamps like 2025-03-10T19:00:09.648Z
+        const loginDate = new Date(timestamp);
 
-        // Add to login days if not already present
-        if (!this.loginDays.includes(dateStr)) {
-          this.loginDays.push(dateStr);
+        // Check if we got a valid date
+        if (!isNaN(loginDate.getTime())) {
+          const dateStr = loginDate.toISOString().split("T")[0];
+
+          // Add to login days if not already present
+          if (!this.loginDays.includes(dateStr)) {
+            this.loginDays.push(dateStr);
+          }
+
+          // Add full login time for pattern analysis
+          this.loginTimes.push({
+            datetime: loginDate,
+            dayOfWeek: loginDate.getDay(),
+            hourOfDay: loginDate.getHours(),
+            weekend: loginDate.getDay() === 0 || loginDate.getDay() === 6,
+            sourceIp: utils.getStandardizedField(
+              record,
+              ["SOURCE_IP", "CLIENT_IP", "SourceIp", "IP_ADDRESS"],
+              null
+            ),
+          });
         }
-
-        // Add full login time for pattern analysis
-        this.loginTimes.push({
-          datetime: loginDate,
-          dayOfWeek: loginDate.getDay(),
-          hourOfDay: loginDate.getHours(),
-          weekend: loginDate.getDay() === 0 || loginDate.getDay() === 6,
-        });
       }
 
-      // Track IP addresses
-      if (record.SourceIp) {
-        const currentCount = this.ipAddresses.get(record.SourceIp) || 0;
-        this.ipAddresses.set(record.SourceIp, currentCount + 1);
+      // Track IP addresses using multiple possible field names
+      const ipAddress = utils.getStandardizedField(
+        record,
+        ["SOURCE_IP", "CLIENT_IP", "SourceIp", "IP_ADDRESS"],
+        null
+      );
+
+      if (ipAddress) {
+        const currentCount = this.ipAddresses.get(ipAddress) || 0;
+        this.ipAddresses.set(ipAddress, currentCount + 1);
       }
 
       // Track location if available
-      if (record.LoginGeoId) {
-        this.knownLocations.add(record.LoginGeoId);
+      const locationId = utils.getStandardizedField(
+        record,
+        ["LOGIN_GEO_ID", "LoginGeoId", "GEO_ID"],
+        null
+      );
+
+      if (locationId) {
+        this.knownLocations.add(locationId);
       }
     });
 
