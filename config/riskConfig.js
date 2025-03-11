@@ -2,6 +2,80 @@
 const fs = require("fs");
 const chalk = require("chalk");
 
+// Helper function for time-based detection
+function detectRapidAccess(
+  row,
+  eventType,
+  session_key_field = "SESSION_KEY",
+  user_id_field = "USER_ID_DERIVED",
+  minTimeBetweenSecs = 2,
+  requiredCount = 10
+) {
+  // Initialize global tracking if it doesn't exist
+  if (!global.rapidAccessTracking) {
+    global.rapidAccessTracking = new Map();
+  }
+
+  // Get the user and session keys
+  const userId = row[user_id_field] || row.USER_ID;
+  const sessionKey = row[session_key_field] || "unknown-session";
+  const trackingKey = `${userId}-${sessionKey}-${eventType}`;
+
+  // Initialize tracking for this user-session-event combination
+  if (!global.rapidAccessTracking.has(trackingKey)) {
+    global.rapidAccessTracking.set(trackingKey, {
+      lastAccessTime: null,
+      accessTimes: [],
+      rapidAccessCount: 0,
+      totalAccesses: 0,
+    });
+  }
+
+  const tracking = global.rapidAccessTracking.get(trackingKey);
+  tracking.totalAccesses++;
+
+  // Parse the current timestamp - only use TIMESTAMP_DERIVED field
+  const currentTime = new Date(row.TIMESTAMP_DERIVED);
+
+  // Check if this is rapid access compared to previous
+  if (tracking.lastAccessTime) {
+    const timeDiffMs = currentTime - tracking.lastAccessTime;
+    const timeDiffSec = timeDiffMs / 1000;
+
+    // If events occur less than minTimeBetweenSecs apart, count as rapid access
+    if (timeDiffSec < minTimeBetweenSecs) {
+      tracking.rapidAccessCount++;
+      tracking.accessTimes.push(timeDiffSec);
+
+      // If we've exceeded the required count of rapid accesses, report the detection
+      if (tracking.rapidAccessCount >= requiredCount) {
+        const avgTimeBetweenAccess =
+          tracking.accessTimes.reduce((sum, time) => sum + time, 0) /
+          tracking.accessTimes.length;
+
+        return {
+          customMessage: `Rapid ${eventType} activity detected: ${
+            tracking.rapidAccessCount
+          } actions in quick succession (avg ${avgTimeBetweenAccess.toFixed(
+            1
+          )}s between actions)`,
+          severityMultiplier: 2.0, // Higher severity for rapid access
+          details: {
+            rapidAccessCount: tracking.rapidAccessCount,
+            totalAccesses: tracking.totalAccesses,
+            averageTimeBetween: avgTimeBetweenAccess.toFixed(1),
+          },
+        };
+      }
+    }
+  }
+
+  // Update the last access time
+  tracking.lastAccessTime = currentTime;
+
+  return null;
+}
+
 // Advanced risk detection configuration - enhanced and expanded
 const riskConfig = {
   ReportExport: {
@@ -54,6 +128,71 @@ const riskConfig = {
       "Excessive internal sharing may indicate staging for exfiltration",
     countField: "RELATED_RECORD_ID", // Count unique documents shared
     timeWindow: "day",
+    customDetection: (row) => {
+      // Initialize tracking if it doesn't exist
+      if (!global.contentSharingTracking) {
+        global.contentSharingTracking = new Map();
+      }
+
+      // Track sharing by user-date
+      const userId = row.USER_ID_DERIVED || row.USER_ID;
+      const dateStr =
+        row.EVENT_DATE ||
+        new Date(row.TIMESTAMP_DERIVED).toISOString().split("T")[0];
+      const trackingKey = `${userId}-${dateStr}`;
+
+      if (!global.contentSharingTracking.has(trackingKey)) {
+        global.contentSharingTracking.set(trackingKey, {
+          sharedEntities: new Set(),
+          sharedDocuments: new Set(),
+          sharedDetails: [],
+        });
+      }
+
+      const tracking = global.contentSharingTracking.get(trackingKey);
+
+      // Add to tracking
+      if (row.SHARED_WITH_ENTITY_ID) {
+        tracking.sharedEntities.add(row.SHARED_WITH_ENTITY_ID);
+      }
+
+      if (row.RELATED_RECORD_ID) {
+        tracking.sharedDocuments.add(row.RELATED_RECORD_ID);
+      }
+
+      // Add detailed mapping
+      tracking.sharedDetails.push({
+        document: row.RELATED_RECORD_ID || "Unknown Document",
+        entity: row.SHARED_WITH_ENTITY_ID || "Unknown Entity",
+        timestamp: row.TIMESTAMP_DERIVED,
+      });
+
+      // If we've exceeded threshold and have entity info
+      if (
+        tracking.sharedDocuments.size >= 10 &&
+        tracking.sharedEntities.size > 0
+      ) {
+        // Format a readable sharing summary
+        const uniqueEntities = Array.from(tracking.sharedEntities);
+        const uniqueDocs = Array.from(tracking.sharedDocuments);
+
+        // Create a summary of sharing activity
+        const sharingList = tracking.sharedDetails
+          .map((detail) => `${detail.document} → ${detail.entity}`)
+          .join("; ");
+
+        return {
+          customMessage: `${uniqueDocs.length} documents shared with ${uniqueEntities.length} entities`,
+          severityMultiplier: 1.0,
+          additionalContext: {
+            totalDocumentsShared: uniqueDocs.length,
+            totalEntitiesSharedWith: uniqueEntities.length,
+            sharingDetails: sharingList,
+          },
+        };
+      }
+      return null;
+    },
   },
   ContentDistribution: {
     description: "Public Sharing Activity",
@@ -169,6 +308,20 @@ const riskConfig = {
           severityMultiplier: 1.5,
         };
       }
+
+      // Time-based detection for rapid search activity
+      const rapidAccessDetection = detectRapidAccess(
+        row,
+        "Search",
+        "SESSION_KEY",
+        "USER_ID_DERIVED",
+        3,
+        8
+      );
+      if (rapidAccessDetection) {
+        return rapidAccessDetection;
+      }
+
       return null;
     },
   },
@@ -204,6 +357,19 @@ const riskConfig = {
     countField: "PAGE_NAME",
     timeWindow: "session",
     customDetection: (row) => {
+      // Time-based detection for rapid page access
+      const rapidAccessDetection = detectRapidAccess(
+        row,
+        "Visualforce Page",
+        "SESSION_KEY",
+        "USER_ID_DERIVED",
+        2,
+        10
+      );
+      if (rapidAccessDetection) {
+        return rapidAccessDetection;
+      }
+
       // Look for rapid page loads or sensitive pages
       if (row.PAGE_NAME && row.PAGE_NAME.toLowerCase().includes("admin")) {
         return {
@@ -221,6 +387,22 @@ const riskConfig = {
     rationale: "Possible scraping or automation (Lightning specific)",
     countField: "COMPONENT_NAME",
     timeWindow: "session",
+    customDetection: (row) => {
+      // Time-based detection for rapid component loading
+      const rapidAccessDetection = detectRapidAccess(
+        row,
+        "Lightning Component",
+        "SESSION_KEY",
+        "USER_ID_DERIVED",
+        1.5,
+        15
+      );
+      if (rapidAccessDetection) {
+        return rapidAccessDetection;
+      }
+
+      return null;
+    },
   },
   LightningPageView: {
     description: "Unusual Page View Volume",
@@ -229,6 +411,22 @@ const riskConfig = {
     rationale: "Recon or bulk record viewing",
     countField: "PAGE_ENTITY_TYPE",
     timeWindow: "session",
+    customDetection: (row) => {
+      // Time-based detection for rapid page views
+      const rapidAccessDetection = detectRapidAccess(
+        row,
+        "Lightning Page",
+        "SESSION_KEY",
+        "USER_ID_DERIVED",
+        2.5,
+        12
+      );
+      if (rapidAccessDetection) {
+        return rapidAccessDetection;
+      }
+
+      return null;
+    },
   },
   Dashboard: {
     description: "Multiple Dashboard Access",
@@ -237,6 +435,22 @@ const riskConfig = {
     rationale: "Unusual recon or data collection",
     countField: "DASHBOARD_ID",
     timeWindow: "day",
+    customDetection: (row) => {
+      // Time-based detection for rapid dashboard access
+      const rapidAccessDetection = detectRapidAccess(
+        row,
+        "Dashboard",
+        "SESSION_KEY",
+        "USER_ID_DERIVED",
+        5,
+        5
+      );
+      if (rapidAccessDetection) {
+        return rapidAccessDetection;
+      }
+
+      return null;
+    },
   },
   AsyncReportRun: {
     description: "Background Reports",
