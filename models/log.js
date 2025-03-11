@@ -40,9 +40,9 @@ class LogProcessor {
           .pipe(csvParser())
           .on("data", (row) => {
             // Only process rows for monitored users
-            if (this.userMap[row.USER_ID]) {
+            if (this.userMap[row.USER_ID_DERIVED]) {
               filteredRows.push(row);
-              usersFound.add(row.USER_ID);
+              usersFound.add(row.USER_ID_DERIVED);
               this.riskDetection.checkForRisks(row, EventType);
             }
           })

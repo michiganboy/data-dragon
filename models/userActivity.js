@@ -356,6 +356,7 @@ class UserActivity {
           points = 150; // Immediate critical risk
           criticalEvents++;
           isHighPriorityEvent = true;
+          score += points; // Add points to total score - FIXED
           riskFactors.push(
             `CRITICAL EVENT - ${warning.eventType}: ${warning.warning} (${points} points)`
           );
@@ -370,6 +371,7 @@ class UserActivity {
           points = 100; // Immediate high risk
           highRiskEvents++;
           isHighPriorityEvent = true;
+          score += points; // Add points to total score - FIXED
           riskFactors.push(
             `HIGH PRIORITY EVENT - ${warning.eventType}: ${warning.warning} (${points} points)`
           );
