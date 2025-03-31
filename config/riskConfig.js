@@ -2,288 +2,141 @@
 const fs = require("fs");
 const chalk = require("chalk");
 
-// Helper function for time-based detection
-function detectRapidAccess(
-  row,
-  eventType,
-  session_key_field = "SESSION_KEY",
-  user_id_field = "USER_ID_DERIVED",
-  minTimeBetweenSecs = 5,
-  requiredCount = 20
-) {
-  // Initialize global tracking if it doesn't exist
-  if (!global.rapidAccessTracking) {
-    global.rapidAccessTracking = new Map();
-  }
-
-  // Get the user and session keys
-  const userId = row[user_id_field] || row.USER_ID;
-  const sessionKey = row[session_key_field] || "unknown-session";
-  const trackingKey = `${userId}-${sessionKey}-${eventType}`;
-
-  // Initialize tracking for this user-session-event combination
-  if (!global.rapidAccessTracking.has(trackingKey)) {
-    global.rapidAccessTracking.set(trackingKey, {
-      lastAccessTime: null,
-      accessTimes: [],
-      rapidAccessCount: 0,
-      totalAccesses: 0,
-      windowStartTime: null,
-    });
-  }
-
-  const tracking = global.rapidAccessTracking.get(trackingKey);
-  tracking.totalAccesses++;
-
-  // Parse the current timestamp - only use TIMESTAMP_DERIVED field
-  const currentTime = new Date(row.TIMESTAMP_DERIVED);
-
-  // Initialize window start time if not set
-  if (!tracking.windowStartTime) {
-    tracking.windowStartTime = currentTime;
-  }
-
-  // Check if we're within a reasonable time window (5 minutes)
-  const windowDuration = (currentTime - tracking.windowStartTime) / 1000;
-  if (windowDuration > 300) { // Reset after 5 minutes
-    tracking.lastAccessTime = null;
-    tracking.accessTimes = [];
-    tracking.rapidAccessCount = 0;
-    tracking.windowStartTime = currentTime;
-  }
-
-  // Check if this is rapid access compared to previous
-  if (tracking.lastAccessTime) {
-    const timeDiffMs = currentTime - tracking.lastAccessTime;
-    const timeDiffSec = timeDiffMs / 1000;
-
-    // If events occur less than minTimeBetweenSecs apart, count as rapid access
-    if (timeDiffSec < minTimeBetweenSecs) {
-      tracking.rapidAccessCount++;
-      tracking.accessTimes.push(timeDiffSec);
-
-      // If we've exceeded the required count of rapid accesses, report the detection
-      if (tracking.rapidAccessCount >= requiredCount) {
-        const avgTimeBetweenAccess =
-          tracking.accessTimes.reduce((sum, time) => sum + time, 0) /
-          tracking.accessTimes.length;
-
-        // Calculate actions per minute for context
-        const actionsPerMinute = (tracking.rapidAccessCount / windowDuration) * 60;
-
-        return {
-          customMessage: `Rapid ${eventType} activity detected: ${
-            tracking.rapidAccessCount
-          } actions in ${windowDuration.toFixed(1)}s (${actionsPerMinute.toFixed(1)} actions/min)`,
-          severityMultiplier: 2.0, // Higher severity for rapid access
-          details: {
-            rapidAccessCount: tracking.rapidAccessCount,
-            totalAccesses: tracking.totalAccesses,
-            averageTimeBetween: avgTimeBetweenAccess.toFixed(1),
-            windowDuration: windowDuration.toFixed(1),
-            actionsPerMinute: actionsPerMinute.toFixed(1),
-          },
-        };
-      }
-    }
-  }
-
-  // Update the last access time
-  tracking.lastAccessTime = currentTime;
-
-  return null;
-}
-
-// Advanced risk detection configuration - enhanced and expanded
 const riskConfig = {
   ReportExport: {
-    description: "Report Export Detected",
-    threshold: 3, // Every instance is tracked
-    severity: "high",
-    rationale: "Direct path to data exfiltration",
-    countField: null,
-    // Advanced detection based on row values
-    customDetection: (row) => {
-      // Check if sensitive fields were exported
-      if (row.RECORDS_PROCESSED && parseInt(row.RECORDS_PROCESSED) > 1000) {
-        return {
-          customMessage: `Large report export with ${row.RECORDS_PROCESSED} records`,
-          severityMultiplier: 2,
-        };
-      }
-      return null;
-    },
+    description: "Report Export",
+    threshold: 1,
+    severity: "critical",
+    rationale: "Every report export is a potential data exfiltration risk",
+    countField: "REPORT_ID",
+    timeWindow: "day",
   },
   DocumentAttachmentDownloads: {
-    description: "Excessive Attachment Downloads",
-    threshold: 20,
-    severity: "high",
-    rationale: "Bulk downloading indicates potential data theft",
-    countField: null,
-    timeWindow: "day", // Count per day
+    description: "Document Download",
+    threshold: 1,
+    severity: "critical",
+    rationale: "Every document download is a potential data exfiltration risk",
+    countField: "DOCUMENT_ID",
+    timeWindow: "hour",
     customDetection: (row) => {
-      // Additional check for sensitive document types
-      const sensitiveTypes = ["pdf", "xlsx", "docx", "csv"];
-      if (
-        row.FILE_TYPE &&
-        sensitiveTypes.some((type) =>
-          row.FILE_TYPE.toLowerCase().includes(type)
-        )
-      ) {
-        return {
-          customMessage: `Sensitive file type download: ${row.FILE_TYPE}`,
-          severityMultiplier: 1.5,
-        };
+      // Only proceed if we have the required fields
+      if (!row.USER_ID_DERIVED || !row.TIMESTAMP_DERIVED) {
+        return null;
       }
-      return null;
-    },
+
+      const userId = row.USER_ID_DERIVED;
+      const currentTime = new Date(row.TIMESTAMP_DERIVED);
+      
+      // Get the hour of the day (0-23)
+      const hour = currentTime.getHours();
+      
+      // Create a tracking key for this user-hour combination
+      const trackingKey = `${userId}-${hour}`;
+
+      // Initialize tracking if it doesn't exist
+      if (!global.documentDownloadTracking) {
+        global.documentDownloadTracking = new Map();
+      }
+
+      // Initialize tracking for this user-hour combination
+      if (!global.documentDownloadTracking.has(trackingKey)) {
+        global.documentDownloadTracking.set(trackingKey, {
+          count: 0,
+          firstAccess: currentTime,
+          lastAccess: currentTime
+        });
+      }
+
+      const tracking = global.documentDownloadTracking.get(trackingKey);
+      tracking.count++;
+      tracking.lastAccess = currentTime;
+
+      // Alert on every download
+      return {
+        customMessage: `Document download detected for user ${userId} during hour ${hour}: ${row.DOCUMENT_ID || 'Unknown document'}`,
+        severityMultiplier: 2.0
+      };
+    }
   },
   ContentDocumentLink: {
     description: "Excessive Internal Sharing",
     threshold: 20,
     severity: "medium",
-    rationale:
-      "Excessive internal sharing may indicate staging for exfiltration",
-    countField: "RELATED_RECORD_ID", // Count unique documents shared
+    rationale: "Excessive internal sharing may indicate staging for exfiltration",
+    countField: "RELATED_RECORD_ID",
     timeWindow: "day",
     customDetection: (row) => {
+      // Only proceed if we have the required fields
+      if (!row.USER_ID_DERIVED || !row.TIMESTAMP_DERIVED) {
+        return null;
+      }
+
+      const userId = row.USER_ID_DERIVED;
+      const currentTime = new Date(row.TIMESTAMP_DERIVED);
+      
+      // Get the hour of the day (0-23)
+      const hour = currentTime.getHours();
+      
+      // Create a tracking key for this user-hour combination
+      const trackingKey = `${userId}-${hour}`;
+
       // Initialize tracking if it doesn't exist
       if (!global.contentSharingTracking) {
         global.contentSharingTracking = new Map();
       }
 
-      // Track sharing by user-date
-      const userId = row.USER_ID_DERIVED || row.USER_ID;
-      const dateStr =
-        row.EVENT_DATE ||
-        new Date(row.TIMESTAMP_DERIVED).toISOString().split("T")[0];
-      const trackingKey = `${userId}-${dateStr}`;
-
+      // Initialize tracking for this user-hour combination
       if (!global.contentSharingTracking.has(trackingKey)) {
         global.contentSharingTracking.set(trackingKey, {
-          sharedEntities: new Set(),
-          sharedDocuments: new Set(),
-          sharedDetails: [],
+          count: 0,
+          firstAccess: currentTime,
+          lastAccess: currentTime
         });
       }
 
       const tracking = global.contentSharingTracking.get(trackingKey);
+      tracking.count++;
+      tracking.lastAccess = currentTime;
 
-      // Add to tracking
-      if (row.SHARED_WITH_ENTITY_ID) {
-        tracking.sharedEntities.add(row.SHARED_WITH_ENTITY_ID);
-      }
+      // Calculate time window in minutes
+      const timeWindowMinutes = (tracking.lastAccess - tracking.firstAccess) / (1000 * 60);
+      
+      // Calculate shares per minute
+      const sharesPerMinute = tracking.count / timeWindowMinutes;
 
-      if (row.RELATED_RECORD_ID) {
-        tracking.sharedDocuments.add(row.RELATED_RECORD_ID);
-      }
-
-      // Add detailed mapping
-      tracking.sharedDetails.push({
-        document: row.RELATED_RECORD_ID || "Unknown Document",
-        entity: row.SHARED_WITH_ENTITY_ID || "Unknown Entity",
-        timestamp: row.TIMESTAMP_DERIVED,
-      });
-
-      // If we've exceeded threshold and have entity info
-      if (
-        tracking.sharedDocuments.size >= 20 &&
-        tracking.sharedEntities.size > 0
-      ) {
-        // Format a readable sharing summary
-        const uniqueEntities = Array.from(tracking.sharedEntities);
-        const uniqueDocs = Array.from(tracking.sharedDocuments);
-
-        // Create a summary of sharing activity
-        const sharingList = tracking.sharedDetails
-          .map((detail) => `${detail.document} → ${detail.entity}`)
-          .join("; ");
-
+      // Alert if shares per minute exceeds threshold
+      if (sharesPerMinute > 0.333) { // 20 shares per hour = ~0.333 shares per minute
         return {
-          customMessage: `${uniqueDocs.length} documents shared with ${uniqueEntities.length} entities`,
-          severityMultiplier: 1.0,
-          additionalContext: {
-            totalDocumentsShared: uniqueDocs.length,
-            totalEntitiesSharedWith: uniqueEntities.length,
-            sharingDetails: sharingList,
-          },
+          customMessage: `High content sharing rate detected for user ${userId} during hour ${hour}: ${tracking.count} shares in ${Math.round(timeWindowMinutes)} minutes (${Math.round(sharesPerMinute * 100) / 100} shares/min)`,
+          severityMultiplier: 1.5
         };
       }
+
       return null;
-    },
+    }
   },
   ContentDistribution: {
     description: "Public Sharing Activity",
-    threshold: 10,
+    threshold: 5,
     severity: "critical",
-    rationale: "Public shares pose significant data exposure risk",
-    countField: null,
+    rationale: "Significant data exposure risk",
+    countField: "CONTENT_ID",
     timeWindow: "day",
-    customDetection: (row) => {
-      // Check if publicly shared with password
-      if (row.PASSWORD_PROTECTED === "false") {
-        return {
-          customMessage: "Public share without password protection",
-          severityMultiplier: 2,
-        };
-      }
-      return null;
-    },
   },
   Login: {
     description: "Multiple IP Logins",
-    threshold: 5,
+    threshold: 3,
     severity: "high",
     rationale: "Could indicate compromised credentials",
-    countField: "CLIENT_IP",
+    countField: "SOURCE_IP",
     timeWindow: "day",
-    customDetection: (row) => {
-      // Check for suspicious IP geo transitions
-      if (
-        row.PREV_LOGIN_IP &&
-        row.CLIENT_IP &&
-        row.PREV_LOGIN_IP !== row.CLIENT_IP
-      ) {
-        // Calculate time since previous login (if available)
-        if (row.PREV_LOGIN_TIME && row.LOGIN_TIME) {
-          const prevTime = new Date(row.PREV_LOGIN_TIME);
-          const currTime = new Date(row.LOGIN_TIME);
-          const hoursDiff = (currTime - prevTime) / (1000 * 60 * 60);
-
-          // If less than 1 hour between logins from different IPs, flag as suspicious
-          if (hoursDiff < 1) {
-            return {
-              customMessage: `Suspicious rapid IP change: ${
-                row.PREV_LOGIN_IP
-              } → ${row.CLIENT_IP} in ${hoursDiff.toFixed(2)} hours`,
-              severityMultiplier: 3,
-            };
-          }
-        }
-        return {
-          customMessage: `IP change: ${row.PREV_LOGIN_IP} → ${row.CLIENT_IP}`,
-          severityMultiplier: 1.5,
-        };
-      }
-      return null;
-    },
   },
   LoginAs: {
     description: "Admin Impersonation",
-    threshold: 3,
+    threshold: 1,
     severity: "high",
-    rationale: "Admin impersonation always warrants review",
+    rationale: "Admin impersonation warrants review",
     countField: null,
-    customDetection: (row) => {
-      // Track which admin performed the login-as
-      if (row.DELEGATED_USERNAME) {
-        return {
-          customMessage: `Impersonated by admin: ${row.DELEGATED_USERNAME}`,
-          severityMultiplier: 1,
-        };
-      }
-      return null;
-    },
   },
   Sites: {
     description: "Internal Access via Guest User",
@@ -315,15 +168,62 @@ const riskConfig = {
     rationale: "Bulk recon activity",
     countField: null,
     timeWindow: "hour",
-    customDetection: (row) =>
-      detectRapidAccess(row, "Search", "SESSION_KEY", "USER_ID_DERIVED", 10, 50),
+    customDetection: (row) => {
+      // Only proceed if we have the required fields
+      if (!row.USER_ID_DERIVED || !row.TIMESTAMP_DERIVED) {
+        return null;
+      }
+
+      const userId = row.USER_ID_DERIVED;
+      const currentTime = new Date(row.TIMESTAMP_DERIVED);
+      
+      // Get the hour of the day (0-23)
+      const hour = currentTime.getHours();
+      
+      // Create a tracking key for this user-hour combination
+      const trackingKey = `${userId}-${hour}`;
+
+      // Initialize tracking if it doesn't exist
+      if (!global.searchTracking) {
+        global.searchTracking = new Map();
+      }
+
+      // Initialize tracking for this user-hour combination
+      if (!global.searchTracking.has(trackingKey)) {
+        global.searchTracking.set(trackingKey, {
+          count: 0,
+          firstAccess: currentTime,
+          lastAccess: currentTime
+        });
+      }
+
+      const tracking = global.searchTracking.get(trackingKey);
+      tracking.count++;
+      tracking.lastAccess = currentTime;
+
+      // Calculate time window in minutes
+      const timeWindowMinutes = (tracking.lastAccess - tracking.firstAccess) / (1000 * 60);
+      
+      // Calculate searches per minute
+      const searchesPerMinute = tracking.count / timeWindowMinutes;
+
+      // Alert if searches per minute exceeds threshold
+      if (searchesPerMinute > 1.67) { // 100 searches per hour = ~1.67 searches per minute
+        return {
+          customMessage: `High search rate detected for user ${userId} during hour ${hour}: ${tracking.count} searches in ${Math.round(timeWindowMinutes)} minutes (${Math.round(searchesPerMinute * 100) / 100} searches/min)`,
+          severityMultiplier: 1.5
+        };
+      }
+
+      return null;
+    }
   },
   ApexCallout: {
     description: "High Volume External Callouts",
     threshold: 30,
     severity: "high",
     rationale: "May indicate external data exfiltration",
-    countField: "ENDPOINT_URL", // Track unique endpoints
+    countField: "ENDPOINT_URL",
     timeWindow: "hour",
     customDetection: (row) => {
       // Check for unofficial/unexpected endpoints
@@ -349,18 +249,112 @@ const riskConfig = {
     rationale: "Possible scraping or automation",
     countField: "PAGE_NAME",
     timeWindow: "hour",
-    customDetection: (row) =>
-      detectRapidAccess(row, "VisualforceRequest", "SESSION_KEY", "USER_ID_DERIVED", 5, 50),
+    customDetection: (row) => {
+      // Only proceed if we have the required fields
+      if (!row.USER_ID_DERIVED || !row.TIMESTAMP_DERIVED) {
+        return null;
+      }
+
+      const userId = row.USER_ID_DERIVED;
+      const currentTime = new Date(row.TIMESTAMP_DERIVED);
+      
+      // Get the hour of the day (0-23)
+      const hour = currentTime.getHours();
+      
+      // Create a tracking key for this user-hour combination
+      const trackingKey = `${userId}-${hour}`;
+
+      // Initialize tracking if it doesn't exist
+      if (!global.visualforceTracking) {
+        global.visualforceTracking = new Map();
+      }
+
+      // Initialize tracking for this user-hour combination
+      if (!global.visualforceTracking.has(trackingKey)) {
+        global.visualforceTracking.set(trackingKey, {
+          count: 0,
+          firstAccess: currentTime,
+          lastAccess: currentTime
+        });
+      }
+
+      const tracking = global.visualforceTracking.get(trackingKey);
+      tracking.count++;
+      tracking.lastAccess = currentTime;
+
+      // Calculate time window in minutes
+      const timeWindowMinutes = (tracking.lastAccess - tracking.firstAccess) / (1000 * 60);
+      
+      // Calculate requests per minute
+      const requestsPerMinute = tracking.count / timeWindowMinutes;
+
+      // Alert if requests per minute exceeds threshold
+      if (requestsPerMinute > 1.67) { // 100 requests per hour = ~1.67 requests per minute
+        return {
+          customMessage: `High Visualforce request rate detected for user ${userId} during hour ${hour}: ${tracking.count} requests in ${Math.round(timeWindowMinutes)} minutes (${Math.round(requestsPerMinute * 100) / 100} requests/min)`,
+          severityMultiplier: 1.5
+        };
+      }
+
+      return null;
+    }
   },
   AuraRequest: {
     description: "Excessive Component Loading",
-    threshold: 150,
+    threshold: 200,
     severity: "high",
     rationale: "Possible scraping or automation (Lightning specific)",
     countField: "COMPONENT_NAME",
     timeWindow: "hour",
-    customDetection: (row) =>
-      detectRapidAccess(row, "AuraRequest", "SESSION_KEY", "USER_ID_DERIVED", 5, 75),
+    customDetection: (row) => {
+      // Only proceed if we have the required fields
+      if (!row.USER_ID_DERIVED || !row.TIMESTAMP_DERIVED) {
+        return null;
+      }
+
+      const userId = row.USER_ID_DERIVED;
+      const currentTime = new Date(row.TIMESTAMP_DERIVED);
+      
+      // Get the hour of the day (0-23)
+      const hour = currentTime.getHours();
+      
+      // Create a tracking key for this user-hour combination
+      const trackingKey = `${userId}-${hour}`;
+
+      // Initialize tracking if it doesn't exist
+      if (!global.auraRequestTracking) {
+        global.auraRequestTracking = new Map();
+      }
+
+      // Initialize tracking for this user-hour combination
+      if (!global.auraRequestTracking.has(trackingKey)) {
+        global.auraRequestTracking.set(trackingKey, {
+          count: 0,
+          firstAccess: currentTime,
+          lastAccess: currentTime
+        });
+      }
+
+      const tracking = global.auraRequestTracking.get(trackingKey);
+      tracking.count++;
+      tracking.lastAccess = currentTime;
+
+      // Calculate time window in minutes
+      const timeWindowMinutes = (tracking.lastAccess - tracking.firstAccess) / (1000 * 60);
+      
+      // Calculate requests per minute
+      const requestsPerMinute = tracking.count / timeWindowMinutes;
+
+      // Alert if requests per minute exceeds threshold
+      if (requestsPerMinute > 3.33) { // 200 requests per hour = ~3.33 requests per minute
+        return {
+          customMessage: `High AuraRequest rate detected for user ${userId} during hour ${hour}: ${tracking.count} requests in ${Math.round(timeWindowMinutes)} minutes (${Math.round(requestsPerMinute * 100) / 100} requests/min)`,
+          severityMultiplier: 1.5
+        };
+      }
+
+      return null;
+    }
   },
   LightningPageView: {
     description: "Unusual Page View Volume",
@@ -369,38 +363,118 @@ const riskConfig = {
     rationale: "Recon or bulk record viewing",
     countField: "PAGE_ENTITY_TYPE",
     timeWindow: "hour",
-    customDetection: (row) =>
-      detectRapidAccess(row, "LightningPageView", "SESSION_KEY", "USER_ID_DERIVED", 5, 100),
-  },
-  Dashboard: {
-    description: "Multiple Dashboard Access",
-    threshold: 15,
-    severity: "medium",
-    rationale: "Unusual recon or data collection",
-    countField: "DASHBOARD_ID",
-    timeWindow: "day",
     customDetection: (row) => {
-      // Time-based detection for rapid dashboard access
-      const rapidAccessDetection = detectRapidAccess(
-        row,
-        "Dashboard",
-        "SESSION_KEY",
-        "USER_ID_DERIVED",
-        5,
-        10
-      );
-      if (rapidAccessDetection) {
-        return rapidAccessDetection;
+      // Only proceed if we have the required fields
+      if (!row.USER_ID_DERIVED || !row.TIMESTAMP_DERIVED) {
+        return null;
+      }
+
+      const userId = row.USER_ID_DERIVED;
+      const currentTime = new Date(row.TIMESTAMP_DERIVED);
+      
+      // Get the hour of the day (0-23)
+      const hour = currentTime.getHours();
+      
+      // Create a tracking key for this user-hour combination
+      const trackingKey = `${userId}-${hour}`;
+
+      // Initialize tracking if it doesn't exist
+      if (!global.lightningPageViewTracking) {
+        global.lightningPageViewTracking = new Map();
+      }
+
+      // Initialize tracking for this user-hour combination
+      if (!global.lightningPageViewTracking.has(trackingKey)) {
+        global.lightningPageViewTracking.set(trackingKey, {
+          count: 0,
+          firstAccess: currentTime,
+          lastAccess: currentTime
+        });
+      }
+
+      const tracking = global.lightningPageViewTracking.get(trackingKey);
+      tracking.count++;
+      tracking.lastAccess = currentTime;
+
+      // Calculate time window in minutes
+      const timeWindowMinutes = (tracking.lastAccess - tracking.firstAccess) / (1000 * 60);
+      
+      // Calculate views per minute
+      const viewsPerMinute = tracking.count / timeWindowMinutes;
+
+      // Alert if views per minute exceeds threshold
+      if (viewsPerMinute > 3.33) { // 200 views per hour = ~3.33 views per minute
+        return {
+          customMessage: `High Lightning page view rate detected for user ${userId} during hour ${hour}: ${tracking.count} views in ${Math.round(timeWindowMinutes)} minutes (${Math.round(viewsPerMinute * 100) / 100} views/min)`,
+          severityMultiplier: 1.5
+        };
       }
 
       return null;
-    },
+    }
+  },
+  Dashboard: {
+    description: "Multiple Dashboard Access",
+    threshold: 30,
+    severity: "medium",
+    rationale: "Unusual recon or data collection",
+    countField: "DASHBOARD_ID",
+    timeWindow: "hour",
+    customDetection: (row) => {
+      // Only proceed if we have the required fields
+      if (!row.USER_ID_DERIVED || !row.TIMESTAMP_DERIVED) {
+        return null;
+      }
+
+      const userId = row.USER_ID_DERIVED;
+      const currentTime = new Date(row.TIMESTAMP_DERIVED);
+      
+      // Get the hour of the day (0-23)
+      const hour = currentTime.getHours();
+      
+      // Create a tracking key for this user-hour combination
+      const trackingKey = `${userId}-${hour}`;
+
+      // Initialize tracking if it doesn't exist
+      if (!global.dashboardTracking) {
+        global.dashboardTracking = new Map();
+      }
+
+      // Initialize tracking for this user-hour combination
+      if (!global.dashboardTracking.has(trackingKey)) {
+        global.dashboardTracking.set(trackingKey, {
+          count: 0,
+          firstAccess: currentTime,
+          lastAccess: currentTime
+        });
+      }
+
+      const tracking = global.dashboardTracking.get(trackingKey);
+      tracking.count++;
+      tracking.lastAccess = currentTime;
+
+      // Calculate time window in minutes
+      const timeWindowMinutes = (tracking.lastAccess - tracking.firstAccess) / (1000 * 60);
+      
+      // Calculate requests per minute
+      const requestsPerMinute = tracking.count / timeWindowMinutes;
+
+      // Alert if requests per minute exceeds threshold
+      if (requestsPerMinute > 0.5) { // 30 requests per hour = 0.5 requests per minute
+        return {
+          customMessage: `High Dashboard access rate detected for user ${userId} during hour ${hour}: ${tracking.count} requests in ${Math.round(timeWindowMinutes)} minutes (${Math.round(requestsPerMinute * 100) / 100} requests/min)`,
+          severityMultiplier: 1.5
+        };
+      }
+
+      return null;
+    }
   },
   AsyncReportRun: {
-    description: "Background Reports",
-    threshold: 15,
-    severity: "high",
-    rationale: "Data staging for later extraction",
+    description: "Background Report Execution",
+    threshold: 1,
+    severity: "critical",
+    rationale: "Every background report execution is a potential data staging risk",
     countField: null,
     timeWindow: "day",
   },
@@ -464,7 +538,6 @@ const riskConfig = {
     countField: "TRIGGER_NAME",
     timeWindow: "day",
   },
-  // New expanded risk types
   ApiAnomalyEventStore: {
     description: "API Anomaly Detected",
     threshold: 3,
@@ -540,9 +613,9 @@ const riskConfig = {
   },
   DataExport: {
     description: "Organization Data Export",
-    threshold: 3,
+    threshold: 1,
     severity: "critical",
-    rationale: "Complete org data extraction",
+    rationale: "Every org data export is a critical security event",
     countField: null,
   },
 };

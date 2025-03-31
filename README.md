@@ -167,33 +167,36 @@ DataDragon monitors for the following types of suspicious activity:
 
 | Event Type                  | What's Detected                          | Risk Level | Rationale                               |
 | --------------------------- | ---------------------------------------- | ---------- | --------------------------------------- |
-| ReportExport                | Report Export                            | Critical   | Direct path to data exfiltration        |
-| DocumentAttachmentDownloads | Excessive Attachment Downloads (>10)     | High       | Bulk downloading indicates data theft   |
-| ContentDocumentLink         | Excessive Internal Sharing (>10)         | Medium     | May indicate staging for exfiltration   |
+| ReportExport                | Report Export                            | Critical   | Every export is a potential data exfiltration risk |
+| DocumentAttachmentDownloads | Document Download                        | Critical   | Every download is a potential data exfiltration risk |
+| ContentDocumentLink         | Excessive Internal Sharing (>20/hour)    | Medium     | May indicate staging for exfiltration   |
 | ContentDistribution         | Public Sharing Activity (>5)             | Critical   | Significant data exposure risk          |
 | Login                       | Multiple IP Logins (>3)                  | High       | Could indicate compromised credentials  |
 | LoginAs                     | Admin Impersonation                      | High       | Admin impersonation warrants review     |
 | Sites                       | Internal Access via Guest User           | High       | May indicate misuse of public access    |
-| Search                      | Excessive Search Activity (>50)          | Medium     | Bulk reconnaissance activity            |
-| ApexCallout                 | High Volume External Callouts (>20/hour) | High       | May indicate external data exfiltration |
-| VisualforceRequest          | Possible Page Scraping (>30)             | Medium     | Possible scraping or automation         |
-| AuraRequest                 | Excessive Component Loading (>30)        | Medium     | Possible scraping (Lightning)           |
-| LightningPageView           | Unusual Page View Volume (>50)           | Medium     | Recon or bulk record viewing            |
-| Dashboard                   | Multiple Dashboard Access (>5)           | Medium     | Unusual recon or data collection        |
-| AsyncReportRun              | Background Reports (>10)                 | High       | Data staging for later extraction       |
+| Search                      | Excessive Search Activity (>100/hour)    | High       | Bulk reconnaissance activity            |
+| ApexCallout                 | High Volume External Callouts (>30/hour) | High       | May indicate external data exfiltration |
+| VisualforceRequest          | Possible Page Scraping (>100/hour)       | High       | Possible scraping or automation         |
+| AuraRequest                 | Excessive Component Loading (>200/hour)  | High       | Possible scraping (Lightning)           |
+| LightningPageView           | Unusual Page View Volume (>200/hour)     | High       | Recon or bulk record viewing            |
+| Dashboard                   | Multiple Dashboard Access (>30/hour)     | Medium     | Unusual recon or data collection        |
+| AsyncReportRun              | Background Report Execution              | Critical   | Every background report is a potential data staging risk |
 | FlowExecution               | Manual Flow Trigger                      | High       | Direct process manipulation             |
 | ApexExecution               | Direct Apex Execution                    | Critical   | Possible direct manipulation or abuse   |
-| ApexTriggerExecution        | Apex Trigger Spike (>100)                | Medium     | Unusual mass-trigger events             |
+| ApexTriggerExecution        | Apex Trigger Spike (>150)                | Medium     | Unusual mass-trigger events             |
 | ApiAnomalyEventStore        | API Anomaly Detected                     | Critical   | Platform detected anomaly               |
-| BulkApiRequest              | Bulk API Usage (>3)                      | Medium     | Mass data operations through API        |
+| BulkApiRequest              | Bulk API Usage (>10)                     | Medium     | Mass data operations through API        |
 | PermissionSetAssignment     | Permission Changes                       | High       | Possible privilege escalation           |
-| LightningError              | Unusual Error Rate (>20)                 | Medium     | May indicate attempted exploitation     |
-| LogoutEvent                 | Unusual Logout Pattern (>10)             | Low        | May indicate session harvesting         |
-| DataExport                  | Organization Data Export                 | Critical   | Complete org data extraction            |
+| LightningError              | Unusual Error Rate (>30)                 | Medium     | May indicate attempted exploitation     |
+| LogoutEvent                 | Unusual Logout Pattern (>15)             | Low        | May indicate session harvesting         |
+| DataExport                  | Organization Data Export                 | Critical   | Every org data export is a critical security event |
 
 Special detection is applied for:
 
-- Large report exports (>1000 records)
+- All report exports (immediate critical risk)
+- All document downloads (immediate critical risk)
+- All background report executions (immediate critical risk)
+- All organization data exports (immediate critical risk)
 - Sensitive file type downloads (pdf, xlsx, docx, csv)
 - Password-less public shares
 - Suspicious rapid IP location changes
