@@ -66,31 +66,25 @@ const riskConfig = {
     countField: "RELATED_RECORD_ID",
     timeWindow: "day",
     customDetection: (row) => {
-      // Only proceed if we have the required fields
       if (!row.USER_ID_DERIVED || !row.TIMESTAMP_DERIVED) {
         return null;
       }
 
       const userId = row.USER_ID_DERIVED;
       const currentTime = new Date(row.TIMESTAMP_DERIVED);
-      
-      // Get the hour of the day (0-23)
       const hour = currentTime.getHours();
-      
-      // Create a tracking key for this user-hour combination
       const trackingKey = `${userId}-${hour}`;
 
-      // Initialize tracking if it doesn't exist
       if (!global.contentSharingTracking) {
         global.contentSharingTracking = new Map();
       }
 
-      // Initialize tracking for this user-hour combination
       if (!global.contentSharingTracking.has(trackingKey)) {
         global.contentSharingTracking.set(trackingKey, {
           count: 0,
           firstAccess: currentTime,
-          lastAccess: currentTime
+          lastAccess: currentTime,
+          alerted: false
         });
       }
 
@@ -98,16 +92,38 @@ const riskConfig = {
       tracking.count++;
       tracking.lastAccess = currentTime;
 
-      // Calculate time window in minutes
-      const timeWindowMinutes = (tracking.lastAccess - tracking.firstAccess) / (1000 * 60);
-      
-      // Calculate shares per minute
-      const sharesPerMinute = tracking.count / timeWindowMinutes;
+      // Don't alert until we have at least the minimum threshold of events
+      if (tracking.count < 20) {
+        return null;
+      }
 
-      // Alert if shares per minute exceeds threshold
-      if (sharesPerMinute > 0.333) { // 20 shares per hour = ~0.333 shares per minute
+      // Calculate time window in milliseconds
+      const timeWindowMs = tracking.lastAccess - tracking.firstAccess;
+      
+      // If time window is less than 1 second, don't alert (avoid division by zero)
+      if (timeWindowMs < 1000) {
+        return null;
+      }
+
+      let timeDisplay;
+      let rateDisplay;
+      
+      if (timeWindowMs < 60000) { // Less than a minute
+        const seconds = Math.max(1, Math.round(timeWindowMs / 1000));
+        const sharesPerSecond = tracking.count / seconds;
+        timeDisplay = `${seconds} second${seconds !== 1 ? 's' : ''}`;
+        rateDisplay = `${Math.round(sharesPerSecond * 100) / 100} shares/sec`;
+      } else {
+        const minutes = Math.max(1, Math.round(timeWindowMs / 60000));
+        const sharesPerMinute = tracking.count / minutes;
+        timeDisplay = `${minutes} minute${minutes !== 1 ? 's' : ''}`;
+        rateDisplay = `${Math.round(sharesPerMinute * 100) / 100} shares/min`;
+      }
+
+      if (!tracking.alerted) {
+        tracking.alerted = true;
         return {
-          customMessage: `High content sharing rate detected for user ${userId} during hour ${hour}: ${tracking.count} shares in ${Math.round(timeWindowMinutes)} minutes (${Math.round(sharesPerMinute * 100) / 100} shares/min)`,
+          customMessage: `High content sharing rate detected for user ${userId} during hour ${hour}: ${tracking.count} shares in ${timeDisplay} (${rateDisplay})`,
           severityMultiplier: 1.5
         };
       }
@@ -169,31 +185,25 @@ const riskConfig = {
     countField: null,
     timeWindow: "hour",
     customDetection: (row) => {
-      // Only proceed if we have the required fields
       if (!row.USER_ID_DERIVED || !row.TIMESTAMP_DERIVED) {
         return null;
       }
 
       const userId = row.USER_ID_DERIVED;
       const currentTime = new Date(row.TIMESTAMP_DERIVED);
-      
-      // Get the hour of the day (0-23)
       const hour = currentTime.getHours();
-      
-      // Create a tracking key for this user-hour combination
       const trackingKey = `${userId}-${hour}`;
 
-      // Initialize tracking if it doesn't exist
       if (!global.searchTracking) {
         global.searchTracking = new Map();
       }
 
-      // Initialize tracking for this user-hour combination
       if (!global.searchTracking.has(trackingKey)) {
         global.searchTracking.set(trackingKey, {
           count: 0,
           firstAccess: currentTime,
-          lastAccess: currentTime
+          lastAccess: currentTime,
+          alerted: false
         });
       }
 
@@ -201,16 +211,38 @@ const riskConfig = {
       tracking.count++;
       tracking.lastAccess = currentTime;
 
-      // Calculate time window in minutes
-      const timeWindowMinutes = (tracking.lastAccess - tracking.firstAccess) / (1000 * 60);
-      
-      // Calculate searches per minute
-      const searchesPerMinute = tracking.count / timeWindowMinutes;
+      // Don't alert until we have at least the minimum threshold of events
+      if (tracking.count < 100) {
+        return null;
+      }
 
-      // Alert if searches per minute exceeds threshold
-      if (searchesPerMinute > 1.67) { // 100 searches per hour = ~1.67 searches per minute
+      // Calculate time window in milliseconds
+      const timeWindowMs = tracking.lastAccess - tracking.firstAccess;
+      
+      // If time window is less than 1 second, don't alert (avoid division by zero)
+      if (timeWindowMs < 1000) {
+        return null;
+      }
+
+      let timeDisplay;
+      let rateDisplay;
+      
+      if (timeWindowMs < 60000) { // Less than a minute
+        const seconds = Math.max(1, Math.round(timeWindowMs / 1000));
+        const searchesPerSecond = tracking.count / seconds;
+        timeDisplay = `${seconds} second${seconds !== 1 ? 's' : ''}`;
+        rateDisplay = `${Math.round(searchesPerSecond * 100) / 100} searches/sec`;
+      } else {
+        const minutes = Math.max(1, Math.round(timeWindowMs / 60000));
+        const searchesPerMinute = tracking.count / minutes;
+        timeDisplay = `${minutes} minute${minutes !== 1 ? 's' : ''}`;
+        rateDisplay = `${Math.round(searchesPerMinute * 100) / 100} searches/min`;
+      }
+
+      if (!tracking.alerted) {
+        tracking.alerted = true;
         return {
-          customMessage: `High search rate detected for user ${userId} during hour ${hour}: ${tracking.count} searches in ${Math.round(timeWindowMinutes)} minutes (${Math.round(searchesPerMinute * 100) / 100} searches/min)`,
+          customMessage: `High search rate detected for user ${userId} during hour ${hour}: ${tracking.count} searches in ${timeDisplay} (${rateDisplay})`,
           severityMultiplier: 1.5
         };
       }
@@ -250,31 +282,25 @@ const riskConfig = {
     countField: "PAGE_NAME",
     timeWindow: "hour",
     customDetection: (row) => {
-      // Only proceed if we have the required fields
       if (!row.USER_ID_DERIVED || !row.TIMESTAMP_DERIVED) {
         return null;
       }
 
       const userId = row.USER_ID_DERIVED;
       const currentTime = new Date(row.TIMESTAMP_DERIVED);
-      
-      // Get the hour of the day (0-23)
       const hour = currentTime.getHours();
-      
-      // Create a tracking key for this user-hour combination
       const trackingKey = `${userId}-${hour}`;
 
-      // Initialize tracking if it doesn't exist
       if (!global.visualforceTracking) {
         global.visualforceTracking = new Map();
       }
 
-      // Initialize tracking for this user-hour combination
       if (!global.visualforceTracking.has(trackingKey)) {
         global.visualforceTracking.set(trackingKey, {
           count: 0,
           firstAccess: currentTime,
-          lastAccess: currentTime
+          lastAccess: currentTime,
+          alerted: false
         });
       }
 
@@ -282,16 +308,38 @@ const riskConfig = {
       tracking.count++;
       tracking.lastAccess = currentTime;
 
-      // Calculate time window in minutes
-      const timeWindowMinutes = (tracking.lastAccess - tracking.firstAccess) / (1000 * 60);
-      
-      // Calculate requests per minute
-      const requestsPerMinute = tracking.count / timeWindowMinutes;
+      // Don't alert until we have at least the minimum threshold of events
+      if (tracking.count < 100) {
+        return null;
+      }
 
-      // Alert if requests per minute exceeds threshold
-      if (requestsPerMinute > 1.67) { // 100 requests per hour = ~1.67 requests per minute
+      // Calculate time window in milliseconds
+      const timeWindowMs = tracking.lastAccess - tracking.firstAccess;
+      
+      // If time window is less than 1 second, don't alert (avoid division by zero)
+      if (timeWindowMs < 1000) {
+        return null;
+      }
+
+      let timeDisplay;
+      let rateDisplay;
+      
+      if (timeWindowMs < 60000) { // Less than a minute
+        const seconds = Math.max(1, Math.round(timeWindowMs / 1000));
+        const requestsPerSecond = tracking.count / seconds;
+        timeDisplay = `${seconds} second${seconds !== 1 ? 's' : ''}`;
+        rateDisplay = `${Math.round(requestsPerSecond * 100) / 100} requests/sec`;
+      } else {
+        const minutes = Math.max(1, Math.round(timeWindowMs / 60000));
+        const requestsPerMinute = tracking.count / minutes;
+        timeDisplay = `${minutes} minute${minutes !== 1 ? 's' : ''}`;
+        rateDisplay = `${Math.round(requestsPerMinute * 100) / 100} requests/min`;
+      }
+
+      if (!tracking.alerted) {
+        tracking.alerted = true;
         return {
-          customMessage: `High Visualforce request rate detected for user ${userId} during hour ${hour}: ${tracking.count} requests in ${Math.round(timeWindowMinutes)} minutes (${Math.round(requestsPerMinute * 100) / 100} requests/min)`,
+          customMessage: `High Visualforce request rate detected for user ${userId} during hour ${hour}: ${tracking.count} requests in ${timeDisplay} (${rateDisplay})`,
           severityMultiplier: 1.5
         };
       }
@@ -307,31 +355,25 @@ const riskConfig = {
     countField: "COMPONENT_NAME",
     timeWindow: "hour",
     customDetection: (row) => {
-      // Only proceed if we have the required fields
       if (!row.USER_ID_DERIVED || !row.TIMESTAMP_DERIVED) {
         return null;
       }
 
       const userId = row.USER_ID_DERIVED;
       const currentTime = new Date(row.TIMESTAMP_DERIVED);
-      
-      // Get the hour of the day (0-23)
       const hour = currentTime.getHours();
-      
-      // Create a tracking key for this user-hour combination
       const trackingKey = `${userId}-${hour}`;
 
-      // Initialize tracking if it doesn't exist
       if (!global.auraRequestTracking) {
         global.auraRequestTracking = new Map();
       }
 
-      // Initialize tracking for this user-hour combination
       if (!global.auraRequestTracking.has(trackingKey)) {
         global.auraRequestTracking.set(trackingKey, {
           count: 0,
           firstAccess: currentTime,
-          lastAccess: currentTime
+          lastAccess: currentTime,
+          alerted: false
         });
       }
 
@@ -339,16 +381,38 @@ const riskConfig = {
       tracking.count++;
       tracking.lastAccess = currentTime;
 
-      // Calculate time window in minutes
-      const timeWindowMinutes = (tracking.lastAccess - tracking.firstAccess) / (1000 * 60);
-      
-      // Calculate requests per minute
-      const requestsPerMinute = tracking.count / timeWindowMinutes;
+      // Don't alert until we have at least the minimum threshold of events
+      if (tracking.count < 200) {
+        return null;
+      }
 
-      // Alert if requests per minute exceeds threshold
-      if (requestsPerMinute > 3.33) { // 200 requests per hour = ~3.33 requests per minute
+      // Calculate time window in milliseconds
+      const timeWindowMs = tracking.lastAccess - tracking.firstAccess;
+      
+      // If time window is less than 1 second, don't alert (avoid division by zero)
+      if (timeWindowMs < 1000) {
+        return null;
+      }
+
+      let timeDisplay;
+      let rateDisplay;
+      
+      if (timeWindowMs < 60000) { // Less than a minute
+        const seconds = Math.max(1, Math.round(timeWindowMs / 1000));
+        const requestsPerSecond = tracking.count / seconds;
+        timeDisplay = `${seconds} second${seconds !== 1 ? 's' : ''}`;
+        rateDisplay = `${Math.round(requestsPerSecond * 100) / 100} requests/sec`;
+      } else {
+        const minutes = Math.max(1, Math.round(timeWindowMs / 60000));
+        const requestsPerMinute = tracking.count / minutes;
+        timeDisplay = `${minutes} minute${minutes !== 1 ? 's' : ''}`;
+        rateDisplay = `${Math.round(requestsPerMinute * 100) / 100} requests/min`;
+      }
+
+      if (!tracking.alerted) {
+        tracking.alerted = true;
         return {
-          customMessage: `High AuraRequest rate detected for user ${userId} during hour ${hour}: ${tracking.count} requests in ${Math.round(timeWindowMinutes)} minutes (${Math.round(requestsPerMinute * 100) / 100} requests/min)`,
+          customMessage: `High AuraRequest rate detected for user ${userId} during hour ${hour}: ${tracking.count} requests in ${timeDisplay} (${rateDisplay})`,
           severityMultiplier: 1.5
         };
       }
@@ -364,31 +428,25 @@ const riskConfig = {
     countField: "PAGE_ENTITY_TYPE",
     timeWindow: "hour",
     customDetection: (row) => {
-      // Only proceed if we have the required fields
       if (!row.USER_ID_DERIVED || !row.TIMESTAMP_DERIVED) {
         return null;
       }
 
       const userId = row.USER_ID_DERIVED;
       const currentTime = new Date(row.TIMESTAMP_DERIVED);
-      
-      // Get the hour of the day (0-23)
       const hour = currentTime.getHours();
-      
-      // Create a tracking key for this user-hour combination
       const trackingKey = `${userId}-${hour}`;
 
-      // Initialize tracking if it doesn't exist
       if (!global.lightningPageViewTracking) {
         global.lightningPageViewTracking = new Map();
       }
 
-      // Initialize tracking for this user-hour combination
       if (!global.lightningPageViewTracking.has(trackingKey)) {
         global.lightningPageViewTracking.set(trackingKey, {
           count: 0,
           firstAccess: currentTime,
-          lastAccess: currentTime
+          lastAccess: currentTime,
+          alerted: false
         });
       }
 
@@ -396,16 +454,38 @@ const riskConfig = {
       tracking.count++;
       tracking.lastAccess = currentTime;
 
-      // Calculate time window in minutes
-      const timeWindowMinutes = (tracking.lastAccess - tracking.firstAccess) / (1000 * 60);
-      
-      // Calculate views per minute
-      const viewsPerMinute = tracking.count / timeWindowMinutes;
+      // Don't alert until we have at least the minimum threshold of events
+      if (tracking.count < 200) {
+        return null;
+      }
 
-      // Alert if views per minute exceeds threshold
-      if (viewsPerMinute > 3.33) { // 200 views per hour = ~3.33 views per minute
+      // Calculate time window in milliseconds
+      const timeWindowMs = tracking.lastAccess - tracking.firstAccess;
+      
+      // If time window is less than 1 second, don't alert (avoid division by zero)
+      if (timeWindowMs < 1000) {
+        return null;
+      }
+
+      let timeDisplay;
+      let rateDisplay;
+      
+      if (timeWindowMs < 60000) { // Less than a minute
+        const seconds = Math.max(1, Math.round(timeWindowMs / 1000));
+        const viewsPerSecond = tracking.count / seconds;
+        timeDisplay = `${seconds} second${seconds !== 1 ? 's' : ''}`;
+        rateDisplay = `${Math.round(viewsPerSecond * 100) / 100} views/sec`;
+      } else {
+        const minutes = Math.max(1, Math.round(timeWindowMs / 60000));
+        const viewsPerMinute = tracking.count / minutes;
+        timeDisplay = `${minutes} minute${minutes !== 1 ? 's' : ''}`;
+        rateDisplay = `${Math.round(viewsPerMinute * 100) / 100} views/min`;
+      }
+
+      if (!tracking.alerted) {
+        tracking.alerted = true;
         return {
-          customMessage: `High Lightning page view rate detected for user ${userId} during hour ${hour}: ${tracking.count} views in ${Math.round(timeWindowMinutes)} minutes (${Math.round(viewsPerMinute * 100) / 100} views/min)`,
+          customMessage: `High Lightning page view rate detected for user ${userId} during hour ${hour}: ${tracking.count} views in ${timeDisplay} (${rateDisplay})`,
           severityMultiplier: 1.5
         };
       }
@@ -421,31 +501,25 @@ const riskConfig = {
     countField: "DASHBOARD_ID",
     timeWindow: "hour",
     customDetection: (row) => {
-      // Only proceed if we have the required fields
       if (!row.USER_ID_DERIVED || !row.TIMESTAMP_DERIVED) {
         return null;
       }
 
       const userId = row.USER_ID_DERIVED;
       const currentTime = new Date(row.TIMESTAMP_DERIVED);
-      
-      // Get the hour of the day (0-23)
       const hour = currentTime.getHours();
-      
-      // Create a tracking key for this user-hour combination
       const trackingKey = `${userId}-${hour}`;
 
-      // Initialize tracking if it doesn't exist
       if (!global.dashboardTracking) {
         global.dashboardTracking = new Map();
       }
 
-      // Initialize tracking for this user-hour combination
       if (!global.dashboardTracking.has(trackingKey)) {
         global.dashboardTracking.set(trackingKey, {
           count: 0,
           firstAccess: currentTime,
-          lastAccess: currentTime
+          lastAccess: currentTime,
+          alerted: false
         });
       }
 
@@ -453,16 +527,39 @@ const riskConfig = {
       tracking.count++;
       tracking.lastAccess = currentTime;
 
-      // Calculate time window in minutes
-      const timeWindowMinutes = (tracking.lastAccess - tracking.firstAccess) / (1000 * 60);
-      
-      // Calculate requests per minute
-      const requestsPerMinute = tracking.count / timeWindowMinutes;
+      // Don't alert until we have at least the minimum threshold of events
+      if (tracking.count < 30) {
+        return null;
+      }
 
-      // Alert if requests per minute exceeds threshold
-      if (requestsPerMinute > 0.5) { // 30 requests per hour = 0.5 requests per minute
+      // Calculate time window in milliseconds
+      const timeWindowMs = tracking.lastAccess - tracking.firstAccess;
+      
+      // If time window is less than 1 second, don't alert (avoid division by zero)
+      if (timeWindowMs < 1000) {
+        return null;
+      }
+
+      let timeDisplay;
+      let rateDisplay;
+      
+      if (timeWindowMs < 60000) { // Less than a minute
+        const seconds = Math.max(1, Math.round(timeWindowMs / 1000));
+        const requestsPerSecond = tracking.count / seconds;
+        timeDisplay = `${seconds} second${seconds !== 1 ? 's' : ''}`;
+        rateDisplay = `${Math.round(requestsPerSecond * 100) / 100} requests/sec`;
+      } else {
+        const minutes = Math.max(1, Math.round(timeWindowMs / 60000));
+        const requestsPerMinute = tracking.count / minutes;
+        timeDisplay = `${minutes} minute${minutes !== 1 ? 's' : ''}`;
+        rateDisplay = `${Math.round(requestsPerMinute * 100) / 100} requests/min`;
+      }
+
+      // Only alert if we haven't already and we have enough events
+      if (!tracking.alerted) {
+        tracking.alerted = true;
         return {
-          customMessage: `High Dashboard access rate detected for user ${userId} during hour ${hour}: ${tracking.count} requests in ${Math.round(timeWindowMinutes)} minutes (${Math.round(requestsPerMinute * 100) / 100} requests/min)`,
+          customMessage: `High Dashboard access rate detected for user ${userId} during hour ${hour}: ${tracking.count} requests in ${timeDisplay} (${rateDisplay})`,
           severityMultiplier: 1.5
         };
       }
@@ -512,23 +609,88 @@ const riskConfig = {
     threshold: 3,
     severity: "critical",
     rationale: "Possible direct manipulation or abuse",
-    countField: "APEX_CLASS_NAME",
+    countField: "USER_ID_DERIVED",
     customDetection: (row) => {
-      // Higher severity for direct data manipulation
-      const criticalClasses = ["data", "admin", "user", "security"];
-      if (
-        row.APEX_CLASS_NAME &&
-        criticalClasses.some((cls) =>
-          row.APEX_CLASS_NAME.toLowerCase().includes(cls)
-        )
-      ) {
+      if (!row.USER_ID_DERIVED || !row.TIMESTAMP_DERIVED) return null;
+
+      const quiddity = row.QUIDDITY || '';
+      const entryPoint = row.ENTRY_POINT || '';
+      
+      const quiddityMap = {
+        'A': 'Anonymous Apex',
+        'B': 'Batch Apex',
+        'F': 'Future Method',
+        'H': 'Scheduled Apex',
+        'I': 'Inbound Email',
+        'L': 'Lightning',
+        'M': 'Remote Action',
+        'Q': 'Queueable Apex',
+        'R': 'Regular Apex',
+        'S': 'Scheduled Apex',
+        'T': 'Trigger',
+        'V': 'Visualforce',
+        'W': 'Web Service',
+        'X': 'Execute Anonymous'
+      };
+
+      const highRiskTypes = ['A', 'X', 'W'];
+      
+      const userId = row.USER_ID_DERIVED;
+      const currentTime = new Date(row.TIMESTAMP_DERIVED);
+      const hour = currentTime.getHours();
+      const trackingKey = `${userId}-${hour}-${quiddity}`;
+
+      if (!global.apexExecutionTracking) {
+        global.apexExecutionTracking = new Map();
+      }
+
+      if (!global.apexExecutionTracking.has(trackingKey)) {
+        global.apexExecutionTracking.set(trackingKey, {
+          count: 0,
+          firstAccess: currentTime,
+          lastAccess: currentTime,
+          alerted: false
+        });
+      }
+
+      const tracking = global.apexExecutionTracking.get(trackingKey);
+      tracking.count++;
+      tracking.lastAccess = currentTime;
+
+      if (tracking.count < 3) return null;
+
+      const timeWindowMs = tracking.lastAccess - tracking.firstAccess;
+      if (timeWindowMs < 1000) return null;
+
+      let timeDisplay;
+      let rateDisplay;
+      
+      if (timeWindowMs < 60000) {
+        const seconds = Math.max(1, Math.round(timeWindowMs / 1000));
+        const executionsPerSecond = tracking.count / seconds;
+        timeDisplay = `${seconds} second${seconds !== 1 ? 's' : ''}`;
+        rateDisplay = `${Math.round(executionsPerSecond * 100) / 100} executions/sec`;
+      } else {
+        const minutes = Math.max(1, Math.round(timeWindowMs / 60000));
+        const executionsPerMinute = tracking.count / minutes;
+        timeDisplay = `${minutes} minute${minutes !== 1 ? 's' : ''}`;
+        rateDisplay = `${Math.round(executionsPerMinute * 100) / 100} executions/min`;
+      }
+
+      if (!tracking.alerted) {
+        tracking.alerted = true;
+        const executionType = quiddityMap[quiddity] || 'Unknown Type';
+        const contextInfo = entryPoint ? ` via ${entryPoint}` : '';
+        const severityMultiplier = highRiskTypes.includes(quiddity) ? 3 : 2;
+        
         return {
-          customMessage: `Critical Apex class executed: ${row.APEX_CLASS_NAME}`,
-          severityMultiplier: 3,
+          customMessage: `High rate of ${executionType} executions detected for user ${userId} during hour ${hour}${contextInfo}: ${tracking.count} executions in ${timeDisplay} (${rateDisplay})`,
+          severityMultiplier
         };
       }
+
       return null;
-    },
+    }
   },
   ApexTriggerExecution: {
     description: "Apex Trigger Spike",
