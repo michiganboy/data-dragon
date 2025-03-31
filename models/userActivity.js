@@ -559,7 +559,7 @@ class UserActivity {
       return this.warnings.map((warning) => ({
         ...baseData,
         date: warning.date || "N/A",
-        time: warning.timestamp || "N/A",
+        timestamp: warning.timestamp || "N/A",
         warning: warning.warning || "N/A",
         severity: warning.severity || "low",
         eventType: warning.eventType || "N/A",
@@ -569,20 +569,18 @@ class UserActivity {
       }));
     }
 
-    // If no warnings, return a single row
-    return [
-      {
-        ...baseData,
-        date: "N/A",
-        time: "N/A",
-        warning: "No security risks detected",
-        severity: "none",
-        eventType: "N/A",
-        clientIp: "N/A",
-        sessionKey: "N/A",
-        context: {},
-      },
-    ];
+    // If no warnings, return a single row with base data
+    return [{
+      ...baseData,
+      date: "N/A",
+      timestamp: "N/A",
+      warning: "No security risks detected",
+      severity: "none",
+      eventType: "N/A",
+      clientIp: "N/A",
+      sessionKey: "N/A",
+      context: {},
+    }];
   }
 }
 
