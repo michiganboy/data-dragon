@@ -8,8 +8,8 @@ function detectRapidAccess(
   eventType,
   session_key_field = "SESSION_KEY",
   user_id_field = "USER_ID_DERIVED",
-  minTimeBetweenSecs = 2,
-  requiredCount = 10
+  minTimeBetweenSecs = 5,
+  requiredCount = 20
 ) {
   // Initialize global tracking if it doesn't exist
   if (!global.rapidAccessTracking) {
@@ -28,6 +28,7 @@ function detectRapidAccess(
       accessTimes: [],
       rapidAccessCount: 0,
       totalAccesses: 0,
+      windowStartTime: null,
     });
   }
 
@@ -36,6 +37,20 @@ function detectRapidAccess(
 
   // Parse the current timestamp - only use TIMESTAMP_DERIVED field
   const currentTime = new Date(row.TIMESTAMP_DERIVED);
+
+  // Initialize window start time if not set
+  if (!tracking.windowStartTime) {
+    tracking.windowStartTime = currentTime;
+  }
+
+  // Check if we're within a reasonable time window (5 minutes)
+  const windowDuration = (currentTime - tracking.windowStartTime) / 1000;
+  if (windowDuration > 300) { // Reset after 5 minutes
+    tracking.lastAccessTime = null;
+    tracking.accessTimes = [];
+    tracking.rapidAccessCount = 0;
+    tracking.windowStartTime = currentTime;
+  }
 
   // Check if this is rapid access compared to previous
   if (tracking.lastAccessTime) {
@@ -53,17 +68,20 @@ function detectRapidAccess(
           tracking.accessTimes.reduce((sum, time) => sum + time, 0) /
           tracking.accessTimes.length;
 
+        // Calculate actions per minute for context
+        const actionsPerMinute = (tracking.rapidAccessCount / windowDuration) * 60;
+
         return {
           customMessage: `Rapid ${eventType} activity detected: ${
             tracking.rapidAccessCount
-          } actions in quick succession (avg ${avgTimeBetweenAccess.toFixed(
-            1
-          )}s between actions)`,
+          } actions in ${windowDuration.toFixed(1)}s (${actionsPerMinute.toFixed(1)} actions/min)`,
           severityMultiplier: 2.0, // Higher severity for rapid access
           details: {
             rapidAccessCount: tracking.rapidAccessCount,
             totalAccesses: tracking.totalAccesses,
             averageTimeBetween: avgTimeBetweenAccess.toFixed(1),
+            windowDuration: windowDuration.toFixed(1),
+            actionsPerMinute: actionsPerMinute.toFixed(1),
           },
         };
       }
@@ -293,37 +311,12 @@ const riskConfig = {
   Search: {
     description: "Excessive Search Activity",
     threshold: 100,
-    severity: "medium",
+    severity: "high",
     rationale: "Bulk recon activity",
     countField: null,
-    timeWindow: "session",
-    customDetection: (row) => {
-      // Check for wildcard searches which may indicate scraping
-      if (
-        row.QUERY_STRING &&
-        (row.QUERY_STRING.includes("*") || row.QUERY_STRING === "%")
-      ) {
-        return {
-          customMessage: "Wildcard search pattern detected",
-          severityMultiplier: 1.5,
-        };
-      }
-
-      // Time-based detection for rapid search activity
-      const rapidAccessDetection = detectRapidAccess(
-        row,
-        "Search",
-        "SESSION_KEY",
-        "USER_ID_DERIVED",
-        3,
-        15
-      );
-      if (rapidAccessDetection) {
-        return rapidAccessDetection;
-      }
-
-      return null;
-    },
+    timeWindow: "hour",
+    customDetection: (row) =>
+      detectRapidAccess(row, "Search", "SESSION_KEY", "USER_ID_DERIVED", 10, 50),
   },
   ApexCallout: {
     description: "High Volume External Callouts",
@@ -351,82 +344,33 @@ const riskConfig = {
   },
   VisualforceRequest: {
     description: "Possible Page Scraping",
-    threshold: 75,
-    severity: "medium",
+    threshold: 100,
+    severity: "high",
     rationale: "Possible scraping or automation",
     countField: "PAGE_NAME",
-    timeWindow: "session",
-    customDetection: (row) => {
-      // Time-based detection for rapid page access
-      const rapidAccessDetection = detectRapidAccess(
-        row,
-        "Visualforce Page",
-        "SESSION_KEY",
-        "USER_ID_DERIVED",
-        0.5,
-        20
-      );
-      if (rapidAccessDetection) {
-        return rapidAccessDetection;
-      }
-
-      // Look for rapid page loads or sensitive pages
-      if (row.PAGE_NAME && row.PAGE_NAME.toLowerCase().includes("admin")) {
-        return {
-          customMessage: `Admin Visualforce page accessed: ${row.PAGE_NAME}`,
-          severityMultiplier: 1.5,
-        };
-      }
-      return null;
-    },
+    timeWindow: "hour",
+    customDetection: (row) =>
+      detectRapidAccess(row, "VisualforceRequest", "SESSION_KEY", "USER_ID_DERIVED", 5, 50),
   },
   AuraRequest: {
     description: "Excessive Component Loading",
-    threshold: 75,
-    severity: "medium",
+    threshold: 150,
+    severity: "high",
     rationale: "Possible scraping or automation (Lightning specific)",
     countField: "COMPONENT_NAME",
-    timeWindow: "session",
-    customDetection: (row) => {
-      // Time-based detection for rapid component loading
-      const rapidAccessDetection = detectRapidAccess(
-        row,
-        "Lightning Component",
-        "SESSION_KEY",
-        "USER_ID_DERIVED",
-        0.5,
-        25
-      );
-      if (rapidAccessDetection) {
-        return rapidAccessDetection;
-      }
-
-      return null;
-    },
+    timeWindow: "hour",
+    customDetection: (row) =>
+      detectRapidAccess(row, "AuraRequest", "SESSION_KEY", "USER_ID_DERIVED", 5, 75),
   },
   LightningPageView: {
     description: "Unusual Page View Volume",
-    threshold: 100,
-    severity: "medium",
+    threshold: 200,
+    severity: "high",
     rationale: "Recon or bulk record viewing",
     countField: "PAGE_ENTITY_TYPE",
-    timeWindow: "session",
-    customDetection: (row) => {
-      // Time-based detection for rapid page views
-      const rapidAccessDetection = detectRapidAccess(
-        row,
-        "Lightning Page",
-        "SESSION_KEY",
-        "USER_ID_DERIVED",
-        0.5,
-        25
-      );
-      if (rapidAccessDetection) {
-        return rapidAccessDetection;
-      }
-
-      return null;
-    },
+    timeWindow: "hour",
+    customDetection: (row) =>
+      detectRapidAccess(row, "LightningPageView", "SESSION_KEY", "USER_ID_DERIVED", 5, 100),
   },
   Dashboard: {
     description: "Multiple Dashboard Access",
