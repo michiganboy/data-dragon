@@ -286,8 +286,8 @@ class UserActivity {
       const hoursDiff =
         (currLogin.datetime - prevLogin.datetime) / (1000 * 60 * 60);
 
-      // Only check within 4 hour window
-      if (hoursDiff >= 4) continue;
+      // Only check within 1 hour window (reduced from 4 hours for more accurate detection)
+      if (hoursDiff >= 1) continue;
 
       // Look up geographic locations
       const prevGeo = geoip.lookup(prevLogin.sourceIp);
@@ -345,7 +345,7 @@ class UserActivity {
           currLocation: currLocation,
           geoInfo: true,
           severityMultiplier: 2.0, // Maximum severity for country changes
-          distanceDesc: `${prevLocation} to ${currLocation}`
+          distanceDesc: `${prevLocation} to ${currLocation} (${hoursDiff < 0.016 ? Math.round(hoursDiff * 60 * 60) + " seconds" : hoursDiff < 1 ? Math.round(hoursDiff * 60) + " minutes" : hoursDiff.toFixed(2) + " hours"} apart)`
         });
       }
       // City changes within the same country are also treated as high risk now
@@ -362,7 +362,7 @@ class UserActivity {
           currLocation: currLocation,
           geoInfo: true,
           severityMultiplier: 2.0, // Increased severity for city changes too
-          distanceDesc: `${prevLocation} to ${currLocation}`
+          distanceDesc: `${prevLocation} to ${currLocation} (${hoursDiff < 0.016 ? Math.round(hoursDiff * 60 * 60) + " seconds" : hoursDiff < 1 ? Math.round(hoursDiff * 60) + " minutes" : hoursDiff.toFixed(2) + " hours"} apart)`
         });
       }
     }
@@ -536,12 +536,13 @@ class UserActivity {
       
       // Handle location change messages with the special prefix
       if (cleanFactor.startsWith('LOCATION_CHANGE:')) {
-        // Extract the locations
-        const locationMatch = cleanFactor.match(/: ([^:]+) to ([^(]+)/);
+        // Extract the locations and timing info
+        const locationMatch = cleanFactor.match(/: ([^:]+) to ([^(]+)(\([^)]+\))?/);
         if (locationMatch && locationMatch.length >= 3) {
           const fromLocation = locationMatch[1].trim();
           const toLocation = locationMatch[2].trim();
-          return `Suspicious login location change: ${fromLocation} to ${toLocation}`;
+          const timeInfo = locationMatch[3] ? ` ${locationMatch[3].trim()}` : '';
+          return `Suspicious login location change: ${fromLocation} to ${toLocation}${timeInfo}`;
         }
         
         // Fallback to simple replacement
@@ -553,12 +554,13 @@ class UserActivity {
       if (cleanFactor.includes('CRITICAL - Geographic location change:') ||
           cleanFactor.includes('CRITICAL - Suspicious login location change:')) {
         
-        // Extract the locations
-        const locationMatch = cleanFactor.match(/: ([^:]+) to ([^(]+)/);
+        // Extract the locations and timing info
+        const locationMatch = cleanFactor.match(/: ([^:]+) to ([^(]+)(\([^)]+\))?/);
         if (locationMatch && locationMatch.length >= 3) {
           const fromLocation = locationMatch[1].trim();
           const toLocation = locationMatch[2].trim();
-          return `Suspicious login location change: ${fromLocation} to ${toLocation}`;
+          const timeInfo = locationMatch[3] ? ` ${locationMatch[3].trim()}` : '';
+          return `Suspicious login location change: ${fromLocation} to ${toLocation}${timeInfo}`;
         }
         
         // Fallback to simple replacement
