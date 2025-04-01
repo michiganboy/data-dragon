@@ -530,7 +530,17 @@ class UserActivity {
       // First, always remove the point values
       const cleanFactor = factor.replace(/ \(\d+ points\)$/, '');
       
-      // Only transform location change messages
+      // Handle location change messages with the special prefix
+      if (cleanFactor.startsWith('LOCATION_CHANGE:')) {
+        return cleanFactor.replace(/^LOCATION_CHANGE: /, '')
+                         .replace(/CRITICAL - .*?(Geographic|Suspicious) location change: /, 'Suspicious login location change: ')
+                         .replace(/\((\d+\.\d+) hours?\)/, '($1 hours apart)')
+                         .replace(/at'([^']+)'/, 'at $1')
+                         .replace(/in US \([^)]+\)/, '');
+      }
+      
+      // Only transform other location change messages that specifically match the pattern
+      // (keeping this for backward compatibility)
       if (cleanFactor.includes('CRITICAL - Geographic location change:') ||
           cleanFactor.includes('CRITICAL - Suspicious login location change:')) {
         
