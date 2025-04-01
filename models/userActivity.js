@@ -159,16 +159,22 @@ class UserActivity {
         let severity = "critical"; // Set all geographic IP changes to critical
         
         if (anomaly.geoInfo && anomaly.distanceDesc) {
-          description = `Rapid location change: ${anomaly.distanceDesc} in ${anomaly.hours} hours (${anomaly.from} → ${anomaly.to})`;
+          // Format a clear, human-readable message
+          const timeDiff = anomaly.hours < 1 
+            ? `${Math.round(anomaly.hours * 60)} minutes` 
+            : `${anomaly.hours} hours`;
+            
+          description = `Suspicious rapid location change detected: User logged in from ${anomaly.prevLocation} at ${anomaly.formattedPrevTime}, then from ${anomaly.currLocation} at ${anomaly.formattedCurrTime} (${timeDiff} apart)`;
           
           // All geographic location changes are now critical severity
           if (anomaly.severityMultiplier) {
             anomaly.severityMultiplier = 2.0; // Ensure high multiplier for all geo changes
           }
         } else {
-          description = `Rapid IP change: ${anomaly.from} → ${anomaly.to} (${anomaly.hours} hours)`;
+          // Fallback for cases where geo lookup failed
+          description = `Rapid IP change from ${anomaly.from} to ${anomaly.to} (${anomaly.hours} hours apart)`;
           if (anomaly.prevLocation && anomaly.currLocation) {
-            description += ` [${anomaly.prevLocation} → ${anomaly.currLocation}]`;
+            description += `: ${anomaly.prevLocation} → ${anomaly.currLocation}`;
           }
         }
         
@@ -287,6 +293,19 @@ class UserActivity {
       const prevGeo = geoip.lookup(prevLogin.sourceIp);
       const currGeo = geoip.lookup(currLogin.sourceIp);
 
+      // Format time for better readability
+      const prevTime = prevLogin.datetime.toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: 'numeric',
+        hour12: true
+      });
+      
+      const currTime = currLogin.datetime.toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: 'numeric',
+        hour12: true
+      });
+
       // If either geo lookup failed, fall back to IP comparison
       if (!prevGeo || !currGeo) {
         anomalies.push({
@@ -295,6 +314,8 @@ class UserActivity {
           hours: hoursDiff.toFixed(2),
           prevTime: prevLogin.datetime.toISOString(),
           currTime: currLogin.datetime.toISOString(),
+          formattedPrevTime: prevTime,
+          formattedCurrTime: currTime,
           prevLocation: prevGeo ? `${prevGeo.country}${prevGeo.city ? ', ' + prevGeo.city : ''}` : 'Unknown',
           currLocation: currGeo ? `${currGeo.country}${currGeo.city ? ', ' + currGeo.city : ''}` : 'Unknown',
           geoInfo: false
@@ -305,6 +326,10 @@ class UserActivity {
       // Skip if same country and city (same location despite different IPs)
       if (prevGeo.country === currGeo.country && prevGeo.city === currGeo.city) continue;
 
+      // Prepare clean location strings
+      const prevLocation = prevGeo.city ? `${prevGeo.city}, ${prevGeo.country}` : prevGeo.country;
+      const currLocation = currGeo.city ? `${currGeo.city}, ${currGeo.country}` : currGeo.country;
+
       // Now any geographic change is considered high risk
       // Higher severity if countries are different
       if (prevGeo.country !== currGeo.country) {
@@ -314,11 +339,13 @@ class UserActivity {
           hours: hoursDiff.toFixed(2),
           prevTime: prevLogin.datetime.toISOString(),
           currTime: currLogin.datetime.toISOString(),
-          prevLocation: `${prevGeo.country}${prevGeo.city ? ', ' + prevGeo.city : ''}`,
-          currLocation: `${currGeo.country}${currGeo.city ? ', ' + currGeo.city : ''}`,
+          formattedPrevTime: prevTime,
+          formattedCurrTime: currTime,
+          prevLocation: prevLocation,
+          currLocation: currLocation,
           geoInfo: true,
           severityMultiplier: 2.0, // Maximum severity for country changes
-          distanceDesc: `Different countries (${prevGeo.country} → ${currGeo.country})`
+          distanceDesc: `${prevLocation} → ${currLocation}`
         });
       }
       // City changes within the same country are also treated as high risk now
@@ -329,11 +356,13 @@ class UserActivity {
           hours: hoursDiff.toFixed(2),
           prevTime: prevLogin.datetime.toISOString(),
           currTime: currLogin.datetime.toISOString(),
-          prevLocation: `${prevGeo.country}, ${prevGeo.city || 'Unknown city'}`,
-          currLocation: `${currGeo.country}, ${currGeo.city || 'Unknown city'}`,
+          formattedPrevTime: prevTime,
+          formattedCurrTime: currTime,
+          prevLocation: prevLocation,
+          currLocation: currLocation,
           geoInfo: true,
           severityMultiplier: 2.0, // Increased severity for city changes too
-          distanceDesc: `Different cities in ${prevGeo.country} (${prevGeo.city || 'Unknown'} → ${currGeo.city || 'Unknown'})`
+          distanceDesc: `${prevLocation} → ${currLocation}`
         });
       }
     }
@@ -443,10 +472,11 @@ class UserActivity {
       
       // For rapid IP changes, include location info if available
       if (anomaly.type === 'rapid_ip_change' && anomaly.details) {
-        if (anomaly.details.distanceDesc) {
-          riskMessage = `CRITICAL - Geographic location change: ${anomaly.details.distanceDesc}`;
+        if (anomaly.details.geoInfo) {
+          // New format: Location-based message
+          riskMessage = `CRITICAL - Suspicious login location change: ${anomaly.details.prevLocation} → ${anomaly.details.currLocation}`;
         } else if (anomaly.details.prevLocation && anomaly.details.currLocation) {
-          riskMessage = `CRITICAL - Rapid IP location change: ${anomaly.details.prevLocation} → ${anomaly.details.currLocation}`;
+          riskMessage = `CRITICAL - IP address change: ${anomaly.details.prevLocation} → ${anomaly.details.currLocation}`;
         }
       }
       
@@ -489,10 +519,37 @@ class UserActivity {
   }
 
   /**
+   * Format risk factors to ensure they're human-readable
+   * This helps clean up the data before it's used in reports
+   * @private
+   */
+  formatRiskFactors() {
+    if (!this.riskFactors || this.riskFactors.length === 0) return;
+
+    this.riskFactors = this.riskFactors.map(factor => {
+      // Clean up geographic location messages
+      if (factor.includes('CRITICAL - Geographic location change:') ||
+          factor.includes('CRITICAL - Suspicious login location change:')) {
+        
+        return factor.replace(/CRITICAL - .*?(Geographic|Suspicious) location change: /, 'Suspicious login location change: ')
+                     .replace(/\((\d+\.\d+) hours?\)/, '($1 hours apart)')
+                     .replace(/at'([^']+)'/, 'at $1')
+                     .replace(/in US \([^)]+\)/, '')
+                     .replace(/ \(\d+ points\)$/, '');
+      }
+      
+      return factor;
+    });
+  }
+
+  /**
    * Get overall risk level based on risk score and critical event counts
    * @returns {string} Risk level (critical, high, medium, low, none)
    */
   getRiskLevel() {
+    // Format risk factors for better readability
+    this.formatRiskFactors();
+    
     // If there are critical events, automatically assign critical risk
     if (this.criticalEvents > 0) {
       return "critical";
