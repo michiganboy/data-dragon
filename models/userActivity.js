@@ -132,9 +132,11 @@ class UserActivity {
   analyzeLoginPatterns() {
     // Skip if not enough data
     if (this.loginTimes.length < 2) {
+      console.log(`[DEBUG] Not enough login times to analyze patterns for user ${this.username}`);
       return [];
     }
 
+    console.log(`[DEBUG] Analyzing login patterns for user ${this.username} with ${this.loginTimes.length} logins`);
     const anomalies = [];
 
     // Analyze time patterns
@@ -151,7 +153,10 @@ class UserActivity {
     }
 
     // Analyze IP address changes
+    console.log(`[DEBUG] Checking rapid IP changes for ${this.username}`);
     const ipAnomalies = this.detectRapidIPChanges();
+    console.log(`[DEBUG] Found ${ipAnomalies.length} IP anomalies for ${this.username}`);
+    
     if (ipAnomalies.length > 0) {
       ipAnomalies.forEach((anomaly) => {
         // Create a more descriptive message using location data if available
@@ -170,12 +175,16 @@ class UserActivity {
           if (anomaly.severityMultiplier) {
             anomaly.severityMultiplier = 2.0; // Ensure high multiplier for all geo changes
           }
+          
+          console.log(`[DEBUG] Added location anomaly: ${description}`);
         } else {
           // Fallback for cases where geo lookup failed
           description = `Rapid IP change from ${anomaly.from} to ${anomaly.to} (${anomaly.hours} hours apart)`;
           if (anomaly.prevLocation && anomaly.currLocation) {
             description += `: ${anomaly.prevLocation} → ${anomaly.currLocation}`;
           }
+          
+          console.log(`[DEBUG] Added IP change anomaly (no geo): ${description}`);
         }
         
         anomalies.push({
@@ -201,6 +210,8 @@ class UserActivity {
     // Store anomalies and update last analysis time
     this.anomalies = anomalies;
     this.lastAnalysisDate = new Date().toISOString();
+    
+    console.log(`[DEBUG] Total anomalies found for ${this.username}: ${anomalies.length}`);
 
     // Calculate overall risk score based on anomalies
     this.calculateRiskScore();
@@ -262,12 +273,17 @@ class UserActivity {
     const anomalies = [];
     const recentLogins = [...this.loginTimes];
     const geoip = require('geoip-lite');
+    
+    // Debug output
+    console.log(`[DEBUG] Checking for rapid IP changes for user ${this.username} (${this.userId})`);
+    console.log(`[DEBUG] Have ${recentLogins.length} login times to analyze`);
 
     // Sort login times chronologically
     recentLogins.sort((a, b) => a.datetime - b.datetime);
 
     // Need at least 2 logins to detect changes
     if (recentLogins.length < 2) {
+      console.log(`[DEBUG] Not enough logins to check for rapid IP changes for user ${this.username}`);
       return anomalies;
     }
 
@@ -276,22 +292,37 @@ class UserActivity {
       const prevLogin = recentLogins[i - 1];
       const currLogin = recentLogins[i];
 
+      // Debug the IPs
+      console.log(`[DEBUG] Comparing IPs: ${prevLogin.sourceIp || 'unknown'} vs ${currLogin.sourceIp || 'unknown'}`);
+
       // If IP information isn't available, skip
-      if (!prevLogin.sourceIp || !currLogin.sourceIp) continue;
+      if (!prevLogin.sourceIp || !currLogin.sourceIp) {
+        console.log(`[DEBUG] Missing source IP for comparison, skipping`);
+        continue;
+      }
 
       // Skip if same IP
-      if (prevLogin.sourceIp === currLogin.sourceIp) continue;
+      if (prevLogin.sourceIp === currLogin.sourceIp) {
+        console.log(`[DEBUG] Same IP, skipping`);
+        continue;
+      }
 
       // Calculate hours between logins
-      const hoursDiff =
-        (currLogin.datetime - prevLogin.datetime) / (1000 * 60 * 60);
+      const hoursDiff = (currLogin.datetime - prevLogin.datetime) / (1000 * 60 * 60);
+      console.log(`[DEBUG] Time difference: ${hoursDiff.toFixed(2)} hours`);
 
-      // Only check within 1 hour window (reduced from 4 hours for more accurate detection)
-      if (hoursDiff >= 1) continue;
+      // Only check within 4 hour window (restored from 1 hour for wider detection)
+      if (hoursDiff >= 4) {
+        console.log(`[DEBUG] Time difference exceeds threshold (4 hours), skipping`);
+        continue;
+      }
 
       // Look up geographic locations
       const prevGeo = geoip.lookup(prevLogin.sourceIp);
       const currGeo = geoip.lookup(currLogin.sourceIp);
+      
+      console.log(`[DEBUG] Geo lookup results: Previous IP ${prevLogin.sourceIp}: ${prevGeo ? JSON.stringify(prevGeo) : 'lookup failed'}`);
+      console.log(`[DEBUG] Geo lookup results: Current IP ${currLogin.sourceIp}: ${currGeo ? JSON.stringify(currGeo) : 'lookup failed'}`);
 
       // Format time for better readability
       const prevTime = prevLogin.datetime.toLocaleTimeString('en-US', {
@@ -308,6 +339,7 @@ class UserActivity {
 
       // If either geo lookup failed, fall back to IP comparison
       if (!prevGeo || !currGeo) {
+        console.log(`[DEBUG] One or both geo lookups failed, using fallback IP comparison`);
         anomalies.push({
           from: prevLogin.sourceIp,
           to: currLogin.sourceIp,
@@ -324,15 +356,21 @@ class UserActivity {
       }
 
       // Skip if same country and city (same location despite different IPs)
-      if (prevGeo.country === currGeo.country && prevGeo.city === currGeo.city) continue;
+      if (prevGeo.country === currGeo.country && prevGeo.city === currGeo.city) {
+        console.log(`[DEBUG] Same location (country and city) despite different IPs, skipping`);
+        continue;
+      }
 
       // Prepare clean location strings
       const prevLocation = prevGeo.city ? `${prevGeo.city}, ${prevGeo.country}` : prevGeo.country;
       const currLocation = currGeo.city ? `${currGeo.city}, ${currGeo.country}` : currGeo.country;
 
+      console.log(`[DEBUG] Different locations detected: ${prevLocation} to ${currLocation}`);
+
       // Now any geographic change is considered high risk
       // Higher severity if countries are different
       if (prevGeo.country !== currGeo.country) {
+        console.log(`[DEBUG] ADDING LOCATION ANOMALY: Different countries detected`);
         anomalies.push({
           from: prevLogin.sourceIp,
           to: currLogin.sourceIp,
@@ -350,6 +388,7 @@ class UserActivity {
       }
       // City changes within the same country are also treated as high risk now
       else if (prevGeo.city !== currGeo.city) {
+        console.log(`[DEBUG] ADDING LOCATION ANOMALY: Different cities detected in same country`);
         anomalies.push({
           from: prevLogin.sourceIp,
           to: currLogin.sourceIp,
@@ -367,6 +406,7 @@ class UserActivity {
       }
     }
 
+    console.log(`[DEBUG] Finished checking rapid IP changes, found ${anomalies.length} anomalies`);
     return anomalies;
   }
 
@@ -574,187 +614,10 @@ class UserActivity {
           const timeInfo = locationMatch[3] ? ` ${locationMatch[3].trim()}` : '';
           return `Suspicious login location change: ${fromLocation} to ${toLocation}${timeInfo}`;
         }
-        
-        // Fallback to simple replacement
-        return cleanFactor.replace(/^LOCATION_CHANGE: /, '')
-                         .replace(/CRITICAL - .*?(Geographic|Suspicious) location change: /, 'Suspicious login location change: ');
       }
       
-      // Only transform other location change messages that specifically match the pattern
-      if (cleanFactor.includes('CRITICAL - Geographic location change:') ||
-          cleanFactor.includes('CRITICAL - Suspicious login location change:')) {
-        
-        // Extract the locations and timing info
-        const locationMatch = cleanFactor.match(/: ([^:]+) to ([^(]+)(\([^)]+\))?/);
-        if (locationMatch && locationMatch.length >= 3) {
-          const fromLocation = locationMatch[1].trim();
-          const toLocation = locationMatch[2].trim();
-          const timeInfo = locationMatch[3] ? ` ${locationMatch[3].trim()}` : '';
-          return `Suspicious login location change: ${fromLocation} to ${toLocation}${timeInfo}`;
-        }
-        
-        // Fallback to simple replacement
-        return cleanFactor.replace(/CRITICAL - .*?(Geographic|Suspicious) location change: /, 'Suspicious login location change: ')
-                         .replace(/at'([^']+)'/, 'at $1')
-                         .replace(/([A-Za-z]) át' ([A-Za-z])/, '$1 at $2')
-                         .replace(/([A-Za-z]) àt' ([A-Za-z])/, '$1 at $2')
-                         .replace(/in US \([^)]+\)/, '');
-      }
-      
-      // Remove Warning prefix from all other messages but keep event type prefixes
-      if (cleanFactor.startsWith('Warning - ')) {
-        return cleanFactor.replace(/^Warning - /, '');
-      }
-      
-      // Return as is if it doesn't match the above patterns
       return cleanFactor;
     });
-  }
-
-  /**
-   * Get overall risk level based on risk score and critical event counts
-   * @returns {string} Risk level (critical, high, medium, low, none)
-   */
-  getRiskLevel() {
-    // Format risk factors for better readability
-    this.formatRiskFactors();
-    
-    // If there are critical events, automatically assign critical risk
-    if (this.criticalEvents > 0) {
-      return "critical";
-    }
-
-    // If there are high risk events, automatically assign high risk
-    if (this.highRiskEvents > 0) {
-      return "high";
-    }
-
-    // For other events, use score thresholds
-    if (this.warnings.length > 0 || this.anomalies.length > 0) {
-      if (this.riskScore >= 100) return "critical";
-      if (this.riskScore >= 75) return "high";
-      if (this.riskScore >= 50) return "medium";
-      if (this.riskScore > 20) return "low";
-    }
-
-    // If no warnings or anomalies, always return 'none'
-    return "none";
-  }
-
-  /**
-   * Get a summary of this user's activity
-   * @returns {Object} User activity summary
-   */
-  getSummary() {
-    // Calculate risk score if not already done
-    if (
-      this.riskScore === 0 &&
-      (this.anomalies.length > 0 || this.warnings.length > 0)
-    ) {
-      this.calculateRiskScore();
-    }
-
-    return {
-      userId: this.userId,
-      username: this.username,
-      loginStats: {
-        totalDays: this.loginDays.length,
-        firstLogin: this.loginDays[0] || "N/A",
-        lastLogin: this.loginDays[this.loginDays.length - 1] || "N/A",
-        uniqueIPs: this.ipAddresses.size,
-        uniqueLocations: this.knownLocations.size,
-      },
-      warningsCount: {
-        total: this.warnings.length,
-        critical: this.warnings.filter((w) => w.severity === "critical").length,
-        high: this.warnings.filter((w) => w.severity === "high").length,
-        medium: this.warnings.filter((w) => w.severity === "medium").length,
-        low: this.warnings.filter((w) => w.severity === "low" || !w.severity)
-          .length,
-      },
-      scannedLogs: Object.fromEntries(this.scannedLogs),
-      anomalies: this.anomalies,
-      riskScore: this.riskScore,
-      riskLevel: this.getRiskLevel(),
-      criticalEvents: this.criticalEvents,
-      highRiskEvents: this.highRiskEvents,
-      riskFactors: this.riskFactors || [],
-    };
-  }
-
-  /**
-   * Get data formatted for CSV reporting
-   * @returns {Object} Data for CSV report
-   */
-  getCSVData() {
-    // Ensure risk score is calculated
-    if (
-      this.riskScore === 0 &&
-      (this.anomalies.length > 0 || this.warnings.length > 0)
-    ) {
-      this.calculateRiskScore();
-    }
-
-    // Format risk factors explanation for the entire user
-    const fullRiskFactorsExplanation =
-      this.riskFactors && this.riskFactors.length > 0
-        ? this.riskFactors.join("; ")
-        : "No risk factors detected";
-
-    // Base data that applies whether there are warnings or not
-    const baseData = {
-      username: this.username,
-      userId: this.userId,
-      firstLoginDate: this.loginDays[0] || "N/A",
-      lastLoginDate: this.loginDays[this.loginDays.length - 1] || "N/A",
-      loginDaysCount: this.loginDays.length,
-      uniqueIPs: this.ipAddresses.size,
-      scannedLogsCount: Array.from(this.scannedLogs.values()).reduce(
-        (a, b) => a + b,
-        0
-      ),
-      scannedEventTypes: Array.from(this.scannedLogs.keys()).join(", "),
-      riskScore: this.riskScore,
-      riskLevel: this.getRiskLevel(),
-      anomalyCount: this.anomalies.length,
-      criticalEvents: this.criticalEvents,
-      highRiskEvents: this.highRiskEvents,
-    };
-
-    // If there are warnings, return one row for each warning
-    if (this.warnings.length > 0) {
-      return this.warnings.map((warning) => {
-        // Use the warning message as the risk explanation for this specific event
-        const eventSpecificRiskExplanation = warning.warning || "No specific risk factors detected";
-        
-        return {
-          ...baseData,
-          date: warning.date || "N/A",
-          timestamp: warning.timestamp || "N/A",
-          warning: warning.warning || "N/A",
-          severity: warning.severity || "low",
-          eventType: warning.eventType || "N/A",
-          clientIp: warning.clientIp || "N/A",
-          sessionKey: warning.sessionKey || "N/A",
-          context: warning.context || {},
-          riskFactorsExplanation: eventSpecificRiskExplanation,
-        };
-      });
-    }
-
-    // If no warnings, return a single row with base data
-    return [{
-      ...baseData,
-      date: "N/A",
-      timestamp: "N/A",
-      warning: "No security risks detected",
-      severity: "none",
-      eventType: "N/A",
-      clientIp: "N/A",
-      sessionKey: "N/A",
-      context: {},
-      riskFactorsExplanation: "No risk factors detected",
-    }];
   }
 }
 
