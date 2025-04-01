@@ -520,8 +520,7 @@ const riskConfig = {
           firstAccess: currentTime,
           lastAccess: currentTime,
           alerted: false,
-          debugLogged: false,
-          uniqueDashboards: new Set()
+          uniqueDashboards: new Set() 
         });
       }
 
@@ -529,25 +528,20 @@ const riskConfig = {
       tracking.count++;
       tracking.lastAccess = currentTime;
       
+      // Track unique dashboards for reporting
       if (row.DASHBOARD_ID) {
         tracking.uniqueDashboards.add(row.DASHBOARD_ID);
       }
 
-      if (tracking.count <= 10 && !tracking.debugLogged) {
-        tracking.debugLogged = true;
-        console.log(`DEBUG: Dashboard tracking for ${userId} hour ${hour}:
-  - Count: ${tracking.count}
-  - First access: ${tracking.firstAccess}
-  - Last access: ${tracking.lastAccess}
-  - Time diff: ${tracking.lastAccess - tracking.firstAccess}ms`);
-      }
-
+      // Early return if count threshold not met
       if (tracking.count < 100) {
         return null;
       }
 
+      // Calculate time window in milliseconds
       const timeWindowMs = tracking.lastAccess - tracking.firstAccess;
       
+      // Ensure we have a reasonable time window to calculate rates
       if (timeWindowMs < 5000) {
         return null;
       }
@@ -572,13 +566,6 @@ const riskConfig = {
       const MIN_RATE_THRESHOLD = 20;
       
       if (tracking.count >= 100 && requestsPerMinute >= MIN_RATE_THRESHOLD && !tracking.alerted) {
-        console.log(`ALERT DECISION: Dashboard for ${userId}:
-  - Count: ${tracking.count} (threshold: 100)
-  - Time window: ${timeWindowMs}ms (${timeDisplay})
-  - Rate: ${requestsPerMinute}/min (threshold: ${MIN_RATE_THRESHOLD}/min)
-  - Unique dashboards: ${tracking.uniqueDashboards.size}
-  - Already alerted: ${tracking.alerted}`);
-          
         tracking.alerted = true;
         return {
           customMessage: `High Dashboard access rate detected for user ${userId} during hour ${hour}: ${tracking.count} requests in ${timeDisplay} (${rateDisplay}) across ${tracking.uniqueDashboards.size} unique dashboards`,
