@@ -65,7 +65,7 @@ const riskConfig = {
     threshold: 20,
     severity: "medium",
     rationale: "Excessive internal sharing may indicate staging for exfiltration",
-    countField: "RELATED_RECORD_ID",
+    countField: "SHARED_WITH_ENTITY_ID",
     timeWindow: "day",
     customDetection: (row) => {
       if (!row.USER_ID_DERIVED || !row.TIMESTAMP_DERIVED) {
@@ -81,18 +81,50 @@ const riskConfig = {
         global.contentSharingTracking = new Map();
       }
 
+      if (!global.userIdToNameMap) {
+        global.userIdToNameMap = new Map();
+      }
+
       if (!global.contentSharingTracking.has(trackingKey)) {
         global.contentSharingTracking.set(trackingKey, {
           count: 0,
           firstAccess: currentTime,
           lastAccess: currentTime,
-          alerted: false
+          alerted: false,
+          entities: new Map() // Change to Map to store ID -> info mapping
         });
       }
 
       const tracking = global.contentSharingTracking.get(trackingKey);
       tracking.count++;
       tracking.lastAccess = currentTime;
+      
+      // Track shared with entities - try multiple possible field names
+      const entityId = row.SHARED_WITH_ENTITY_ID || row.LINKED_ENTITY_ID || row.RELATED_RECORD_ID || "unknown";
+      
+      if (entityId !== "unknown") {
+        // Check if this looks like a user ID (starts with 005)
+        const isUserEntity = entityId.startsWith('005');
+        let entityName = row.SHARED_WITH_ENTITY_NAME || row.ENTITY_NAME || null;
+        
+        // Store shared user in global map if we have their name
+        if (isUserEntity && entityName) {
+          global.userIdToNameMap.set(entityId, entityName);
+        }
+        
+        // Look up name if we've seen this user ID before and don't have a name yet
+        if (isUserEntity && !entityName && global.userIdToNameMap.has(entityId)) {
+          entityName = global.userIdToNameMap.get(entityId);
+        }
+        
+        // Store entity info in the tracking map
+        tracking.entities.set(entityId, {
+          id: entityId,
+          name: entityName,
+          isUser: isUserEntity,
+          count: (tracking.entities.get(entityId)?.count || 0) + 1
+        });
+      }
 
       // Don't alert until we have at least the minimum threshold of events
       if (tracking.count < 20) {
@@ -124,8 +156,22 @@ const riskConfig = {
 
       if (!tracking.alerted) {
         tracking.alerted = true;
+        const entityCount = tracking.entities ? tracking.entities.size : 0;
+        
+        // Identify top recipients (up to 3)
+        let recipientInfo = "";
+        if (tracking.entities.size > 0) {
+          const topRecipients = Array.from(tracking.entities.values())
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 3);
+            
+          recipientInfo = ` Top recipients: ${topRecipients.map(e => 
+            e.name ? `${e.name} (${e.count})` : `${e.id.substring(0, 8)}... (${e.count})`
+          ).join(', ')}`;
+        }
+        
         return {
-          customMessage: `High content sharing rate detected for user ${userId} during hour ${hour}: ${tracking.count} shares in ${timeDisplay} (${rateDisplay})`,
+          customMessage: `High content sharing rate detected for user ${userId} during hour ${hour}: ${tracking.count} shares in ${timeDisplay} (${rateDisplay}) across ${entityCount} entities.${recipientInfo}`,
           severityMultiplier: 1.5
         };
       }
@@ -296,18 +342,24 @@ const riskConfig = {
     threshold: 30,
     severity: "high",
     rationale: "May indicate external data exfiltration",
-    countField: "ENDPOINT_URL",
+    countField: "URL",
     timeWindow: "hour",
     customDetection: (row) => {
       // Check for unofficial/unexpected endpoints
       const allowedDomains = ["api.salesforce.com", "yourcompany.com"];
-      if (row.ENDPOINT_URL) {
+      
+      // Get the standardized URL field using utils
+      const utils = require("../lib/utils");
+      const standardFields = utils.getStandardFields(row);
+      const endpointUrl = standardFields.endpointUrl;
+      
+      if (endpointUrl) {
         const isAllowedDomain = allowedDomains.some((domain) =>
-          row.ENDPOINT_URL.includes(domain)
+          endpointUrl.includes(domain)
         );
         if (!isAllowedDomain) {
           return {
-            customMessage: `Callout to non-approved endpoint: ${row.ENDPOINT_URL}`,
+            customMessage: `Callout to non-approved endpoint: ${endpointUrl}`,
             severityMultiplier: 2,
           };
         }
@@ -393,7 +445,7 @@ const riskConfig = {
     threshold: 800,
     severity: "high",
     rationale: "Possible scraping or automation (Lightning specific)",
-    countField: "COMPONENT_NAME",
+    countField: "ACTION",
     timeWindow: "hour",
     customDetection: (row) => {
       if (!row.USER_ID_DERIVED || !row.TIMESTAMP_DERIVED) {
@@ -414,13 +466,20 @@ const riskConfig = {
           count: 0,
           firstAccess: currentTime,
           lastAccess: currentTime,
-          alerted: false
+          alerted: false,
+          actions: new Set()
         });
       }
 
       const tracking = global.auraRequestTracking.get(trackingKey);
       tracking.count++;
       tracking.lastAccess = currentTime;
+      
+      // Track unique actions
+      const action = row.ACTION || 'unknown';
+      if (action !== 'unknown') {
+        tracking.actions.add(action);
+      }
 
       // Don't alert until we have at least the minimum threshold of events
       if (tracking.count < 800) {
@@ -452,8 +511,9 @@ const riskConfig = {
 
       if (!tracking.alerted) {
         tracking.alerted = true;
+        const actionCount = tracking.actions ? tracking.actions.size : 0;
         return {
-          customMessage: `High AuraRequest rate detected for user ${userId} during hour ${hour}: ${tracking.count} requests in ${timeDisplay} (${rateDisplay})`,
+          customMessage: `High AuraRequest rate detected for user ${userId} during hour ${hour}: ${tracking.count} requests in ${timeDisplay} (${rateDisplay}) across ${actionCount} different actions`,
           severityMultiplier: 1.5
         };
       }
