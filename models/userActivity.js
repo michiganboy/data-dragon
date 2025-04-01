@@ -154,10 +154,28 @@ class UserActivity {
     const ipAnomalies = this.detectRapidIPChanges();
     if (ipAnomalies.length > 0) {
       ipAnomalies.forEach((anomaly) => {
+        // Create a more descriptive message using location data if available
+        let description = "";
+        let severity = "critical"; // Set all geographic IP changes to critical
+        
+        if (anomaly.geoInfo && anomaly.distanceDesc) {
+          description = `Rapid location change: ${anomaly.distanceDesc} in ${anomaly.hours} hours (${anomaly.from} → ${anomaly.to})`;
+          
+          // All geographic location changes are now critical severity
+          if (anomaly.severityMultiplier) {
+            anomaly.severityMultiplier = 2.0; // Ensure high multiplier for all geo changes
+          }
+        } else {
+          description = `Rapid IP change: ${anomaly.from} → ${anomaly.to} (${anomaly.hours} hours)`;
+          if (anomaly.prevLocation && anomaly.currLocation) {
+            description += ` [${anomaly.prevLocation} → ${anomaly.currLocation}]`;
+          }
+        }
+        
         anomalies.push({
           type: "rapid_ip_change",
-          severity: "high",
-          description: `Rapid IP change: ${anomaly.from} → ${anomaly.to} (${anomaly.hours} hours)`,
+          severity: severity,
+          description: description,
           details: anomaly,
         });
       });
@@ -230,13 +248,14 @@ class UserActivity {
   }
 
   /**
-   * Detect suspicious rapid changes in IP addresses
+   * Detect suspicious rapid changes in IP addresses based on geographic location
    * @private
    * @returns {Object[]} Array of rapid IP change anomalies
    */
   detectRapidIPChanges() {
     const anomalies = [];
     const recentLogins = [...this.loginTimes];
+    const geoip = require('geoip-lite');
 
     // Sort login times chronologically
     recentLogins.sort((a, b) => a.datetime - b.datetime);
@@ -261,14 +280,60 @@ class UserActivity {
       const hoursDiff =
         (currLogin.datetime - prevLogin.datetime) / (1000 * 60 * 60);
 
-      // Flag as anomaly if less than 4 hours between logins from different IPs
-      if (hoursDiff < 4) {
+      // Only check within 4 hour window
+      if (hoursDiff >= 4) continue;
+
+      // Look up geographic locations
+      const prevGeo = geoip.lookup(prevLogin.sourceIp);
+      const currGeo = geoip.lookup(currLogin.sourceIp);
+
+      // If either geo lookup failed, fall back to IP comparison
+      if (!prevGeo || !currGeo) {
         anomalies.push({
           from: prevLogin.sourceIp,
           to: currLogin.sourceIp,
           hours: hoursDiff.toFixed(2),
           prevTime: prevLogin.datetime.toISOString(),
           currTime: currLogin.datetime.toISOString(),
+          prevLocation: prevGeo ? `${prevGeo.country}${prevGeo.city ? ', ' + prevGeo.city : ''}` : 'Unknown',
+          currLocation: currGeo ? `${currGeo.country}${currGeo.city ? ', ' + currGeo.city : ''}` : 'Unknown',
+          geoInfo: false
+        });
+        continue;
+      }
+
+      // Skip if same country and city (same location despite different IPs)
+      if (prevGeo.country === currGeo.country && prevGeo.city === currGeo.city) continue;
+
+      // Now any geographic change is considered high risk
+      // Higher severity if countries are different
+      if (prevGeo.country !== currGeo.country) {
+        anomalies.push({
+          from: prevLogin.sourceIp,
+          to: currLogin.sourceIp,
+          hours: hoursDiff.toFixed(2),
+          prevTime: prevLogin.datetime.toISOString(),
+          currTime: currLogin.datetime.toISOString(),
+          prevLocation: `${prevGeo.country}${prevGeo.city ? ', ' + prevGeo.city : ''}`,
+          currLocation: `${currGeo.country}${currGeo.city ? ', ' + currGeo.city : ''}`,
+          geoInfo: true,
+          severityMultiplier: 2.0, // Maximum severity for country changes
+          distanceDesc: `Different countries (${prevGeo.country} → ${currGeo.country})`
+        });
+      }
+      // City changes within the same country are also treated as high risk now
+      else if (prevGeo.city !== currGeo.city) {
+        anomalies.push({
+          from: prevLogin.sourceIp,
+          to: currLogin.sourceIp,
+          hours: hoursDiff.toFixed(2),
+          prevTime: prevLogin.datetime.toISOString(),
+          currTime: currLogin.datetime.toISOString(),
+          prevLocation: `${prevGeo.country}, ${prevGeo.city || 'Unknown city'}`,
+          currLocation: `${currGeo.country}, ${currGeo.city || 'Unknown city'}`,
+          geoInfo: true,
+          severityMultiplier: 2.0, // Increased severity for city changes too
+          distanceDesc: `Different cities in ${prevGeo.country} (${prevGeo.city || 'Unknown'} → ${currGeo.city || 'Unknown'})`
         });
       }
     }
@@ -344,6 +409,55 @@ class UserActivity {
       let points = 0;
       switch (anomaly.severity) {
         case "critical":
+          // Give extra points to geographical location changes
+          if (anomaly.type === 'rapid_ip_change' && anomaly.details && anomaly.details.geoInfo) {
+            points = 50; // Higher points for geographical location changes
+          } else {
+            points = 40;
+          }
+          criticalEvents++;
+          break;
+        case "high":
+          points = 25;
+          highRiskEvents++;
+          break;
+        case "medium":
+          points = 15;
+          break;
+        case "low":
+          points = 5;
+          break;
+        default:
+          points = 2;
+      }
+
+      // Apply additional multiplier if specified in the anomaly details
+      if (anomaly.details && anomaly.details.severityMultiplier) {
+        points = Math.round(points * anomaly.details.severityMultiplier);
+      }
+
+      score += points;
+      
+      // Create a more informative risk factor message
+      let riskMessage = `Anomaly - ${anomaly.type}`;
+      
+      // For rapid IP changes, include location info if available
+      if (anomaly.type === 'rapid_ip_change' && anomaly.details) {
+        if (anomaly.details.distanceDesc) {
+          riskMessage = `CRITICAL - Geographic location change: ${anomaly.details.distanceDesc}`;
+        } else if (anomaly.details.prevLocation && anomaly.details.currLocation) {
+          riskMessage = `CRITICAL - Rapid IP location change: ${anomaly.details.prevLocation} → ${anomaly.details.currLocation}`;
+        }
+      }
+      
+      riskFactors.push(`${riskMessage} (${points} points)`);
+    });
+
+    // Add points for each warning
+    this.warnings.forEach((warning) => {
+      let points = 0;
+      switch (warning.severity) {
+        case "critical":
           points = 40;
           criticalEvents++;
           break;
@@ -362,88 +476,16 @@ class UserActivity {
       }
 
       score += points;
-      riskFactors.push(`Anomaly - ${anomaly.type} (${points} points)`);
+      riskFactors.push(
+        `Warning - ${warning.warning} (${points} points)`
+      );
     });
 
-    // Process security warnings with special handling for critical event types
-    this.warnings.forEach((warning) => {
-      let points = 0;
-      let isHighPriorityEvent = false;
-
-      // Check if this is a high-priority event that should automatically
-      // trigger high or critical risk levels
-      if (warning.eventType) {
-        const eventType = warning.eventType.toLowerCase();
-
-        // Direct data exfiltration events
-        if (
-          eventType === "reportexport" ||
-          eventType === "dataexport" ||
-          (eventType === "bulkapirequest" &&
-            warning.context?.RECORDS_PROCESSED > 10000)
-        ) {
-          points = 150; // Immediate critical risk
-          criticalEvents++;
-          isHighPriorityEvent = true;
-          score += points; // Add points to total score - FIXED
-          riskFactors.push(
-            `CRITICAL EVENT - ${warning.eventType}: ${warning.warning} (${points} points)`
-          );
-        }
-        // Admin/system level events
-        else if (
-          eventType === "loginas" ||
-          eventType === "apexexecution" ||
-          eventType === "permissionsetassignment" ||
-          eventType === "apianomaly"
-        ) {
-          points = 100; // Immediate high risk
-          highRiskEvents++;
-          isHighPriorityEvent = true;
-          score += points; // Add points to total score - FIXED
-          riskFactors.push(
-            `HIGH PRIORITY EVENT - ${warning.eventType}: ${warning.warning} (${points} points)`
-          );
-        }
-      }
-
-      // If not a special high-priority event, use the standard severity-based scoring
-      if (!isHighPriorityEvent) {
-        switch (warning.severity) {
-          case "critical":
-            points = 50;
-            criticalEvents++;
-            break;
-          case "high":
-            points = 30;
-            highRiskEvents++;
-            break;
-          case "medium":
-            points = 15;
-            break;
-          case "low":
-            points = 5;
-            break;
-          default:
-            points = 2;
-        }
-
-        score += points;
-        riskFactors.push(
-          `Security warning - ${warning.eventType || "Unknown"}: ${
-            warning.warning
-          } (${points} points)`
-        );
-      }
-    });
-
-    // Store the number of critical and high risk events for use in getRiskLevel
-    this.criticalEvents = criticalEvents;
-    this.highRiskEvents = highRiskEvents;
-
+    // Store the results
     this.riskScore = score;
     this.riskFactors = riskFactors;
-    return score;
+    this.criticalEvents = criticalEvents;
+    this.highRiskEvents = highRiskEvents;
   }
 
   /**

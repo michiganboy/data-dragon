@@ -152,8 +152,8 @@ const riskConfig = {
   InternationalLogin: {
     description: "Login from outside US",
     threshold: 1,
-    severity: "high",
-    rationale: "Login from non-US location",
+    severity: "critical",
+    rationale: "Non-US login represents significant security risk",
     countField: null,
     timeWindow: "day",
     customDetection: (row) => {
@@ -177,7 +177,7 @@ const riskConfig = {
         if (geo.country !== 'US') {
           return {
             customMessage: `Login from international location: ${geo.country} (${geo.city || 'Unknown City'}) via IP ${ipAddress}`,
-            severityMultiplier: 1.5
+            severityMultiplier: 2.0
           };
         }
       } catch (error) {
