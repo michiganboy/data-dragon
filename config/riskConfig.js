@@ -622,8 +622,12 @@ const riskConfig = {
     customDetection: (row) => {
       if (!row.USER_ID_DERIVED || !row.TIMESTAMP_DERIVED) return null;
 
+      console.log(`DEBUG ApexExecution: Processing event for user ${row.USER_ID_DERIVED}`);
+      
       const quiddity = row.QUIDDITY || '';
       const entryPoint = row.ENTRY_POINT || '';
+      
+      console.log(`DEBUG ApexExecution: Quiddity=${quiddity}, EntryPoint=${entryPoint}`);
       
       const quiddityMap = {
         'A': 'Anonymous Apex',
@@ -645,6 +649,8 @@ const riskConfig = {
       // Only these types are considered high risk
       const highRiskTypes = ['A', 'X', 'W'];
       
+      console.log(`DEBUG ApexExecution: Is high risk type? ${highRiskTypes.includes(quiddity)}`);
+      
       // Skip low-risk types that are likely just normal page functionality
       // Only alert on high-risk execution types
       if (!highRiskTypes.includes(quiddity)) {
@@ -655,12 +661,15 @@ const riskConfig = {
       const currentTime = new Date(row.TIMESTAMP_DERIVED);
       const hour = currentTime.getHours();
       const trackingKey = `${userId}-${hour}-${quiddity}`;
+      
+      console.log(`DEBUG ApexExecution: TrackingKey=${trackingKey}`);
 
       if (!global.apexExecutionTracking) {
         global.apexExecutionTracking = new Map();
       }
 
       if (!global.apexExecutionTracking.has(trackingKey)) {
+        console.log(`DEBUG ApexExecution: Creating new tracking entry`);
         global.apexExecutionTracking.set(trackingKey, {
           count: 0,
           firstAccess: currentTime,
@@ -672,11 +681,21 @@ const riskConfig = {
       const tracking = global.apexExecutionTracking.get(trackingKey);
       tracking.count++;
       tracking.lastAccess = currentTime;
+      
+      console.log(`DEBUG ApexExecution: Current count=${tracking.count}, Threshold=3, Already alerted=${tracking.alerted}`);
 
-      if (tracking.count < 3) return null;
+      if (tracking.count < 3) {
+        console.log(`DEBUG ApexExecution: Count below threshold, returning null`);
+        return null;
+      }
 
       const timeWindowMs = tracking.lastAccess - tracking.firstAccess;
-      if (timeWindowMs < 1000) return null;
+      console.log(`DEBUG ApexExecution: Time window=${timeWindowMs}ms`);
+      
+      if (timeWindowMs < 1000) {
+        console.log(`DEBUG ApexExecution: Time window too small, returning null`);
+        return null;
+      }
 
       let timeDisplay;
       let rateDisplay;
@@ -694,6 +713,7 @@ const riskConfig = {
       }
 
       if (!tracking.alerted) {
+        console.log(`DEBUG ApexExecution: Generating alert`);
         tracking.alerted = true;
         const executionType = quiddityMap[quiddity] || 'Unknown Type';
         const contextInfo = entryPoint ? ` via ${entryPoint}` : '';
@@ -705,6 +725,7 @@ const riskConfig = {
         };
       }
 
+      console.log(`DEBUG ApexExecution: Already alerted, returning null`);
       return null;
     }
   },
