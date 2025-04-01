@@ -473,14 +473,44 @@ class UserActivity {
       // For rapid IP changes, include location info if available
       if (anomaly.type === 'rapid_ip_change' && anomaly.details) {
         if (anomaly.details.geoInfo) {
-          // New format: Location-based message
+          // New format: Location-based message with time information 
           const prevLoc = anomaly.details.prevLocation || "Unknown location";
           const currLoc = anomaly.details.currLocation || "Unknown location";
-          riskMessage = `CRITICAL - Suspicious login location change: ${prevLoc.trim()} to ${currLoc.trim()}`;
+          const hoursDiff = anomaly.details.hours || "unknown";
+          
+          // Format time difference for better readability
+          let timeDesc = "";
+          if (hoursDiff !== "unknown") {
+            const hourValue = parseFloat(hoursDiff);
+            if (hourValue < 0.016) { // Less than 1 minute
+              timeDesc = `(${Math.round(hourValue * 60 * 60)} seconds apart)`;
+            } else if (hourValue < 1) { // Less than 1 hour
+              timeDesc = `(${Math.round(hourValue * 60)} minutes apart)`;
+            } else {
+              timeDesc = `(${hourValue} hours apart)`;
+            }
+          }
+          
+          riskMessage = `CRITICAL - Suspicious login location change: ${prevLoc.trim()} to ${currLoc.trim()} ${timeDesc}`;
         } else if (anomaly.details.prevLocation && anomaly.details.currLocation) {
           const prevLoc = anomaly.details.prevLocation || "Unknown location";
           const currLoc = anomaly.details.currLocation || "Unknown location";
-          riskMessage = `CRITICAL - IP address change: ${prevLoc.trim()} to ${currLoc.trim()}`;
+          const hoursDiff = anomaly.details.hours || "unknown";
+          
+          // Format time difference for better readability
+          let timeDesc = "";
+          if (hoursDiff !== "unknown") {
+            const hourValue = parseFloat(hoursDiff);
+            if (hourValue < 0.016) { // Less than 1 minute
+              timeDesc = `(${Math.round(hourValue * 60 * 60)} seconds apart)`;
+            } else if (hourValue < 1) { // Less than 1 hour
+              timeDesc = `(${Math.round(hourValue * 60)} minutes apart)`;
+            } else {
+              timeDesc = `(${hourValue} hours apart)`;
+            }
+          }
+          
+          riskMessage = `CRITICAL - IP address change: ${prevLoc.trim()} to ${currLoc.trim()} ${timeDesc}`;
         }
       }
       
@@ -665,8 +695,8 @@ class UserActivity {
       this.calculateRiskScore();
     }
 
-    // Format risk factors explanation
-    const riskFactorsExplanation =
+    // Format risk factors explanation for the entire user
+    const fullRiskFactorsExplanation =
       this.riskFactors && this.riskFactors.length > 0
         ? this.riskFactors.join("; ")
         : "No risk factors detected";
@@ -689,22 +719,27 @@ class UserActivity {
       anomalyCount: this.anomalies.length,
       criticalEvents: this.criticalEvents,
       highRiskEvents: this.highRiskEvents,
-      riskFactorsExplanation: riskFactorsExplanation,
     };
 
     // If there are warnings, return one row for each warning
     if (this.warnings.length > 0) {
-      return this.warnings.map((warning) => ({
-        ...baseData,
-        date: warning.date || "N/A",
-        timestamp: warning.timestamp || "N/A",
-        warning: warning.warning || "N/A",
-        severity: warning.severity || "low",
-        eventType: warning.eventType || "N/A",
-        clientIp: warning.clientIp || "N/A",
-        sessionKey: warning.sessionKey || "N/A",
-        context: warning.context || {},
-      }));
+      return this.warnings.map((warning) => {
+        // Use the warning message as the risk explanation for this specific event
+        const eventSpecificRiskExplanation = warning.warning || "No specific risk factors detected";
+        
+        return {
+          ...baseData,
+          date: warning.date || "N/A",
+          timestamp: warning.timestamp || "N/A",
+          warning: warning.warning || "N/A",
+          severity: warning.severity || "low",
+          eventType: warning.eventType || "N/A",
+          clientIp: warning.clientIp || "N/A",
+          sessionKey: warning.sessionKey || "N/A",
+          context: warning.context || {},
+          riskFactorsExplanation: eventSpecificRiskExplanation,
+        };
+      });
     }
 
     // If no warnings, return a single row with base data
@@ -718,6 +753,7 @@ class UserActivity {
       clientIp: "N/A",
       sessionKey: "N/A",
       context: {},
+      riskFactorsExplanation: "No risk factors detected",
     }];
   }
 }
