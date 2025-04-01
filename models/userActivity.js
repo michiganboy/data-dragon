@@ -507,18 +507,8 @@ class UserActivity {
 
       score += points;
       
-      // Create a more specific warning message based on event type
-      let warningMessage = warning.warning;
-      
-      // For ContentDocumentLink, format the warning to avoid confusion with IP changes
-      if (warning.eventType === 'ContentDocumentLink') {
-        // Make sure content sharing alerts have a clear prefix
-        if (!warningMessage.startsWith('Content sharing:')) {
-          warningMessage = `Content sharing: ${warningMessage}`;
-        }
-      }
-      
-      riskFactors.push(`Warning - ${warningMessage} (${points} points)`);
+      // Simply prefix the warning message with "Warning - " without modifying content
+      riskFactors.push(`Warning - ${warning.warning} (${points} points)`);
     });
 
     // Store the results
@@ -537,24 +527,26 @@ class UserActivity {
     if (!this.riskFactors || this.riskFactors.length === 0) return;
 
     this.riskFactors = this.riskFactors.map(factor => {
-      // Clean up geographic location messages
-      if (factor.includes('CRITICAL - Geographic location change:') ||
-          factor.includes('CRITICAL - Suspicious login location change:')) {
+      // First, always remove the point values
+      const cleanFactor = factor.replace(/ \(\d+ points\)$/, '');
+      
+      // Only transform location change messages
+      if (cleanFactor.includes('CRITICAL - Geographic location change:') ||
+          cleanFactor.includes('CRITICAL - Suspicious login location change:')) {
         
-        return factor.replace(/CRITICAL - .*?(Geographic|Suspicious) location change: /, 'Suspicious login location change: ')
-                     .replace(/\((\d+\.\d+) hours?\)/, '($1 hours apart)')
-                     .replace(/at'([^']+)'/, 'at $1')
-                     .replace(/in US \([^)]+\)/, '')
-                     .replace(/ \(\d+ points\)$/, '');
+        return cleanFactor.replace(/CRITICAL - .*?(Geographic|Suspicious) location change: /, 'Suspicious login location change: ')
+                         .replace(/\((\d+\.\d+) hours?\)/, '($1 hours apart)')
+                         .replace(/at'([^']+)'/, 'at $1')
+                         .replace(/in US \([^)]+\)/, '');
       }
       
-      // Handle content sharing messages differently
-      if (factor.includes('Content sharing:')) {
-        return factor.replace(/ \(\d+ points\)$/, '');
+      // Remove Warning prefix from all other messages but keep event type prefixes
+      if (cleanFactor.startsWith('Warning - ')) {
+        return cleanFactor.replace(/^Warning - /, '');
       }
       
-      // For all other risk factors, just remove the point values
-      return factor.replace(/ \(\d+ points\)$/, '');
+      // Return as is if it doesn't match the above patterns
+      return cleanFactor;
     });
   }
 
