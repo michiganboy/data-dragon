@@ -345,7 +345,7 @@ class UserActivity {
           currLocation: currLocation,
           geoInfo: true,
           severityMultiplier: 2.0, // Maximum severity for country changes
-          distanceDesc: `${prevLocation} → ${currLocation}`
+          distanceDesc: `${prevLocation} to ${currLocation}`
         });
       }
       // City changes within the same country are also treated as high risk now
@@ -362,7 +362,7 @@ class UserActivity {
           currLocation: currLocation,
           geoInfo: true,
           severityMultiplier: 2.0, // Increased severity for city changes too
-          distanceDesc: `${prevLocation} → ${currLocation}`
+          distanceDesc: `${prevLocation} to ${currLocation}`
         });
       }
     }
@@ -474,9 +474,13 @@ class UserActivity {
       if (anomaly.type === 'rapid_ip_change' && anomaly.details) {
         if (anomaly.details.geoInfo) {
           // New format: Location-based message
-          riskMessage = `CRITICAL - Suspicious login location change: ${anomaly.details.prevLocation} → ${anomaly.details.currLocation}`;
+          const prevLoc = anomaly.details.prevLocation || "Unknown location";
+          const currLoc = anomaly.details.currLocation || "Unknown location";
+          riskMessage = `CRITICAL - Suspicious login location change: ${prevLoc.trim()} to ${currLoc.trim()}`;
         } else if (anomaly.details.prevLocation && anomaly.details.currLocation) {
-          riskMessage = `CRITICAL - IP address change: ${anomaly.details.prevLocation} → ${anomaly.details.currLocation}`;
+          const prevLoc = anomaly.details.prevLocation || "Unknown location";
+          const currLoc = anomaly.details.currLocation || "Unknown location";
+          riskMessage = `CRITICAL - IP address change: ${prevLoc.trim()} to ${currLoc.trim()}`;
         }
       }
       
@@ -532,21 +536,36 @@ class UserActivity {
       
       // Handle location change messages with the special prefix
       if (cleanFactor.startsWith('LOCATION_CHANGE:')) {
+        // Extract the locations
+        const locationMatch = cleanFactor.match(/: ([^:]+) to ([^(]+)/);
+        if (locationMatch && locationMatch.length >= 3) {
+          const fromLocation = locationMatch[1].trim();
+          const toLocation = locationMatch[2].trim();
+          return `Suspicious login location change: ${fromLocation} to ${toLocation}`;
+        }
+        
+        // Fallback to simple replacement
         return cleanFactor.replace(/^LOCATION_CHANGE: /, '')
-                         .replace(/CRITICAL - .*?(Geographic|Suspicious) location change: /, 'Suspicious login location change: ')
-                         .replace(/\((\d+\.\d+) hours?\)/, '($1 hours apart)')
-                         .replace(/at'([^']+)'/, 'at $1')
-                         .replace(/in US \([^)]+\)/, '');
+                         .replace(/CRITICAL - .*?(Geographic|Suspicious) location change: /, 'Suspicious login location change: ');
       }
       
       // Only transform other location change messages that specifically match the pattern
-      // (keeping this for backward compatibility)
       if (cleanFactor.includes('CRITICAL - Geographic location change:') ||
           cleanFactor.includes('CRITICAL - Suspicious login location change:')) {
         
+        // Extract the locations
+        const locationMatch = cleanFactor.match(/: ([^:]+) to ([^(]+)/);
+        if (locationMatch && locationMatch.length >= 3) {
+          const fromLocation = locationMatch[1].trim();
+          const toLocation = locationMatch[2].trim();
+          return `Suspicious login location change: ${fromLocation} to ${toLocation}`;
+        }
+        
+        // Fallback to simple replacement
         return cleanFactor.replace(/CRITICAL - .*?(Geographic|Suspicious) location change: /, 'Suspicious login location change: ')
-                         .replace(/\((\d+\.\d+) hours?\)/, '($1 hours apart)')
                          .replace(/at'([^']+)'/, 'at $1')
+                         .replace(/([A-Za-z]) át' ([A-Za-z])/, '$1 at $2')
+                         .replace(/([A-Za-z]) àt' ([A-Za-z])/, '$1 at $2')
                          .replace(/in US \([^)]+\)/, '');
       }
       
