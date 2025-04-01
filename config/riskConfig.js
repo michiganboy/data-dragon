@@ -686,12 +686,15 @@ const riskConfig = {
       // Only these types are considered high risk
       const highRiskTypes = ['A', 'X', 'W'];
       
-      // Skip low-risk types that are likely just normal page functionality
+      // IMPORTANT: Skip low-risk types that are likely just normal page functionality
       // Only alert on high-risk execution types
       if (!highRiskTypes.includes(quiddity)) {
+        // For debugging purposes, log the quiddity code we're skipping
+        console.log(`[INFO] Skipping ApexExecution with non-high-risk quiddity: ${quiddity} (${quiddityMap[quiddity] || 'Unknown'})`);
         return null;
       }
       
+      // Only track executions of high-risk types
       const userId = row.USER_ID_DERIVED;
       const currentTime = new Date(row.TIMESTAMP_DERIVED);
       const hour = currentTime.getHours();
