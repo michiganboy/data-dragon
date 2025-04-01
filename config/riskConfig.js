@@ -1,6 +1,8 @@
 // Risk detection configuration
 const fs = require("fs");
 const chalk = require("chalk");
+const path = require("path");
+const geoip = require('geoip-lite');
 
 const riskConfig = {
   ReportExport: {
@@ -146,6 +148,45 @@ const riskConfig = {
     rationale: "Could indicate compromised credentials",
     countField: "SOURCE_IP",
     timeWindow: "day",
+  },
+  InternationalLogin: {
+    description: "Login from outside US",
+    threshold: 1,
+    severity: "high",
+    rationale: "Login from non-US location",
+    countField: null,
+    timeWindow: "day",
+    customDetection: (row) => {
+      // Skip if IP is not present
+      if (!row.SOURCE_IP) {
+        return null;
+      }
+      
+      const ipAddress = row.SOURCE_IP;
+      
+      try {
+        // Look up IP location
+        const geo = geoip.lookup(ipAddress);
+        
+        // If geo lookup failed or is null
+        if (!geo) {
+          return null;
+        }
+        
+        // Check if outside US (country code not 'US')
+        if (geo.country !== 'US') {
+          return {
+            customMessage: `Login from international location: ${geo.country} (${geo.city || 'Unknown City'}) via IP ${ipAddress}`,
+            severityMultiplier: 1.5
+          };
+        }
+      } catch (error) {
+        // In case of error in geoip lookup, just log and continue
+        console.error(`Error looking up IP ${ipAddress}: ${error.message}`);
+      }
+      
+      return null;
+    }
   },
   LoginAs: {
     description: "Admin Impersonation",
