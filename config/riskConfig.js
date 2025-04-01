@@ -171,7 +171,7 @@ const riskConfig = {
         }
         
         return {
-          customMessage: `High content sharing rate detected for user ${userId} during hour ${hour}: ${tracking.count} shares in ${timeDisplay} (${rateDisplay}) across ${entityCount} entities.${recipientInfo}`,
+          customMessage: `Content sharing: High rate detected for user ${userId} during hour ${hour}: ${tracking.count} shares in ${timeDisplay} (${rateDisplay}) across ${entityCount} entities.${recipientInfo}`,
           severityMultiplier: 1.5
         };
       }

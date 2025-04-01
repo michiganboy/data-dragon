@@ -506,9 +506,19 @@ class UserActivity {
       }
 
       score += points;
-      riskFactors.push(
-        `Warning - ${warning.warning} (${points} points)`
-      );
+      
+      // Create a more specific warning message based on event type
+      let warningMessage = warning.warning;
+      
+      // For ContentDocumentLink, format the warning to avoid confusion with IP changes
+      if (warning.eventType === 'ContentDocumentLink') {
+        // Make sure content sharing alerts have a clear prefix
+        if (!warningMessage.startsWith('Content sharing:')) {
+          warningMessage = `Content sharing: ${warningMessage}`;
+        }
+      }
+      
+      riskFactors.push(`Warning - ${warningMessage} (${points} points)`);
     });
 
     // Store the results
@@ -538,7 +548,13 @@ class UserActivity {
                      .replace(/ \(\d+ points\)$/, '');
       }
       
-      return factor;
+      // Handle content sharing messages differently
+      if (factor.includes('Content sharing:')) {
+        return factor.replace(/ \(\d+ points\)$/, '');
+      }
+      
+      // For all other risk factors, just remove the point values
+      return factor.replace(/ \(\d+ points\)$/, '');
     });
   }
 
