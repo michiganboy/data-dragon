@@ -349,7 +349,7 @@ const riskConfig = {
   },
   AuraRequest: {
     description: "Excessive Component Loading",
-    threshold: 200,
+    threshold: 800,
     severity: "high",
     rationale: "Possible scraping or automation (Lightning specific)",
     countField: "COMPONENT_NAME",
@@ -382,7 +382,7 @@ const riskConfig = {
       tracking.lastAccess = currentTime;
 
       // Don't alert until we have at least the minimum threshold of events
-      if (tracking.count < 200) {
+      if (tracking.count < 800) {
         return null;
       }
 
@@ -495,10 +495,10 @@ const riskConfig = {
   },
   Dashboard: {
     description: "Multiple Dashboard Access",
-    threshold: 30,
+    threshold: 100,
     severity: "medium",
     rationale: "Unusual recon or data collection",
-    countField: "DASHBOARD_ID",
+    countField: null,
     timeWindow: "hour",
     customDetection: (row) => {
       if (!row.USER_ID_DERIVED || !row.TIMESTAMP_DERIVED) {
@@ -519,47 +519,69 @@ const riskConfig = {
           count: 0,
           firstAccess: currentTime,
           lastAccess: currentTime,
-          alerted: false
+          alerted: false,
+          debugLogged: false,
+          uniqueDashboards: new Set()
         });
       }
 
       const tracking = global.dashboardTracking.get(trackingKey);
       tracking.count++;
       tracking.lastAccess = currentTime;
+      
+      if (row.DASHBOARD_ID) {
+        tracking.uniqueDashboards.add(row.DASHBOARD_ID);
+      }
 
-      // Don't alert until we have at least the minimum threshold of events
-      if (tracking.count < 30) {
+      if (tracking.count <= 10 && !tracking.debugLogged) {
+        tracking.debugLogged = true;
+        console.log(`DEBUG: Dashboard tracking for ${userId} hour ${hour}:
+  - Count: ${tracking.count}
+  - First access: ${tracking.firstAccess}
+  - Last access: ${tracking.lastAccess}
+  - Time diff: ${tracking.lastAccess - tracking.firstAccess}ms`);
+      }
+
+      if (tracking.count < 100) {
         return null;
       }
 
-      // Calculate time window in milliseconds
       const timeWindowMs = tracking.lastAccess - tracking.firstAccess;
       
-      // If time window is less than 1 second, don't alert (avoid division by zero)
-      if (timeWindowMs < 1000) {
+      if (timeWindowMs < 5000) {
         return null;
       }
 
       let timeDisplay;
       let rateDisplay;
+      let requestsPerMinute = 0;
       
-      if (timeWindowMs < 60000) { // Less than a minute
-        const seconds = Math.max(1, Math.round(timeWindowMs / 1000));
+      if (timeWindowMs < 60000) {
+        const seconds = Math.max(5, Math.round(timeWindowMs / 1000));
         const requestsPerSecond = tracking.count / seconds;
+        requestsPerMinute = requestsPerSecond * 60;
         timeDisplay = `${seconds} second${seconds !== 1 ? 's' : ''}`;
         rateDisplay = `${Math.round(requestsPerSecond * 100) / 100} requests/sec`;
       } else {
         const minutes = Math.max(1, Math.round(timeWindowMs / 60000));
-        const requestsPerMinute = tracking.count / minutes;
+        requestsPerMinute = tracking.count / minutes;
         timeDisplay = `${minutes} minute${minutes !== 1 ? 's' : ''}`;
         rateDisplay = `${Math.round(requestsPerMinute * 100) / 100} requests/min`;
       }
 
-      // Only alert if we haven't already and we have enough events
-      if (!tracking.alerted) {
+      const MIN_RATE_THRESHOLD = 20;
+      
+      if (tracking.count >= 100 && requestsPerMinute >= MIN_RATE_THRESHOLD && !tracking.alerted) {
+        console.log(`ALERT DECISION: Dashboard for ${userId}:
+  - Count: ${tracking.count} (threshold: 100)
+  - Time window: ${timeWindowMs}ms (${timeDisplay})
+  - Rate: ${requestsPerMinute}/min (threshold: ${MIN_RATE_THRESHOLD}/min)
+  - Unique dashboards: ${tracking.uniqueDashboards.size}
+  - Already alerted: ${tracking.alerted}`);
+          
         tracking.alerted = true;
         return {
-          customMessage: `High Dashboard access rate detected for user ${userId} during hour ${hour}: ${tracking.count} requests in ${timeDisplay} (${rateDisplay})`,
+          customMessage: `High Dashboard access rate detected for user ${userId} during hour ${hour}: ${tracking.count} requests in ${timeDisplay} (${rateDisplay}) across ${tracking.uniqueDashboards.size} unique dashboards`,
           severityMultiplier: 1.5
         };
       }
@@ -633,7 +655,14 @@ const riskConfig = {
         'X': 'Execute Anonymous'
       };
 
+      // Only these types are considered high risk
       const highRiskTypes = ['A', 'X', 'W'];
+      
+      // Skip low-risk types that are likely just normal page functionality
+      // Only alert on high-risk execution types
+      if (!highRiskTypes.includes(quiddity)) {
+        return null;
+      }
       
       const userId = row.USER_ID_DERIVED;
       const currentTime = new Date(row.TIMESTAMP_DERIVED);
@@ -681,7 +710,7 @@ const riskConfig = {
         tracking.alerted = true;
         const executionType = quiddityMap[quiddity] || 'Unknown Type';
         const contextInfo = entryPoint ? ` via ${entryPoint}` : '';
-        const severityMultiplier = highRiskTypes.includes(quiddity) ? 3 : 2;
+        const severityMultiplier = 3; // High severity for these high-risk types
         
         return {
           customMessage: `High rate of ${executionType} executions detected for user ${userId} during hour ${hour}${contextInfo}: ${tracking.count} executions in ${timeDisplay} (${rateDisplay})`,
