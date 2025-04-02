@@ -778,6 +778,7 @@ class UserActivity {
           sessionKey: warning.sessionKey || "N/A",
           context: warning.context || {},
           riskFactorsExplanation: eventSpecificRiskExplanation,
+          priority: warning.priority || false // Pass through priority flag
         };
       });
     }

@@ -234,6 +234,14 @@ const riskConfig = {
       return null;
     }
   },
+  LocationChange: {
+    description: "Suspicious Location Change",
+    threshold: 1,
+    severity: "critical",
+    rationale: "Login from different locations in a short time period indicates potential compromise",
+    countField: null,
+    timeWindow: "day"
+  },
   LoginAs: {
     description: "Admin Impersonation",
     threshold: 1,
