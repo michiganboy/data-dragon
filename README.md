@@ -101,22 +101,17 @@ npm run wake-dragon
 
 ## 📊 Output Files
 
-DataDragon produces the following output files:
+DataDragon automatically generates the following output files:
 
 - **output/tokens.json**: Cached authentication tokens
-- **output/summary-report.json**: JSON data that could be used for generating additional reports
+- **output/summary-report.json**: JSON report with detailed findings and statistics
 - **output/summary-report.csv**: CSV report of all detected risks with detailed context information
-- **output/reports/security-report.pdf**: PDF security report with visualizations (when using --pdf option)
+- **output/reports/security-report.pdf**: PDF security report with visualizations and risk analytics
 
-The CSV report includes:
-
-- User activity information
-- Detailed risk context
-- Login patterns
-- Risk factors explanations
-- Specific event details for each warning
-
-The CSV report is designed for easy import into spreadsheet applications for investigation and analysis.
+The reports provide different views of the same security findings:
+- **JSON**: Structured data for programmatic analysis or import into other tools
+- **CSV**: Tabular data for spreadsheet analysis and detailed investigation
+- **PDF**: Professional report with executive summary and visualization for presentation
 
 ## 🧠 Enhanced Risk Assessment System
 
@@ -234,12 +229,13 @@ DataDragon supports several command line options:
 --days=7              Only scan logs from the last 7 days
 --config=path         Specify a custom risk config file
 --output=path         Custom location for output files
---pdf                 Generate PDF security report
 --pdf-title="Title"   Custom title for PDF report
 --pdf-org="Org Name"  Organization name for PDF report
---pdf-output=path     Custom location for PDF report
+--pdf-output=path     Custom location for PDF report (default: output/reports/security-report.pdf)
 --pdf-no-appendix     Exclude appendix section from PDF report
 ```
+
+PDF reports are automatically generated in the output/reports directory along with CSV and JSON reports.
 
 ## 🔍 Security Investigation Best Practices
 
