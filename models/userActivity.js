@@ -721,6 +721,81 @@ class UserActivity {
     // If no warnings or anomalies, always return 'none'
     return "none";
   }
+
+  /**
+   * Get data formatted for CSV reporting
+   * @returns {Object} Data for CSV report
+   */
+  getCSVData() {
+    // Ensure risk score is calculated
+    if (
+      this.riskScore === 0 &&
+      (this.anomalies.length > 0 || this.warnings.length > 0)
+    ) {
+      this.calculateRiskScore();
+    }
+
+    // Format risk factors explanation for the entire user
+    const fullRiskFactorsExplanation =
+      this.riskFactors && this.riskFactors.length > 0
+        ? this.riskFactors.join("; ")
+        : "No risk factors detected";
+
+    // Base data that applies whether there are warnings or not
+    const baseData = {
+      username: this.username,
+      userId: this.userId,
+      firstLoginDate: this.loginDays[0] || "N/A",
+      lastLoginDate: this.loginDays[this.loginDays.length - 1] || "N/A",
+      loginDaysCount: this.loginDays.length,
+      uniqueIPs: this.ipAddresses.size,
+      scannedLogsCount: Array.from(this.scannedLogs.values()).reduce(
+        (a, b) => a + b,
+        0
+      ),
+      scannedEventTypes: Array.from(this.scannedLogs.keys()).join(", "),
+      riskScore: this.riskScore,
+      riskLevel: this.getRiskLevel(),
+      anomalyCount: this.anomalies.length,
+      criticalEvents: this.criticalEvents,
+      highRiskEvents: this.highRiskEvents,
+    };
+
+    // If there are warnings, return one row for each warning
+    if (this.warnings.length > 0) {
+      return this.warnings.map((warning) => {
+        // Use the warning message as the risk explanation for this specific event
+        const eventSpecificRiskExplanation = warning.warning || "No specific risk factors detected";
+        
+        return {
+          ...baseData,
+          date: warning.date || "N/A",
+          timestamp: warning.timestamp || "N/A",
+          warning: warning.warning || "N/A",
+          severity: warning.severity || "low",
+          eventType: warning.eventType || "N/A",
+          clientIp: warning.clientIp || "N/A",
+          sessionKey: warning.sessionKey || "N/A",
+          context: warning.context || {},
+          riskFactorsExplanation: eventSpecificRiskExplanation,
+        };
+      });
+    }
+
+    // If no warnings, return a single row with base data
+    return [{
+      ...baseData,
+      date: "N/A",
+      timestamp: "N/A",
+      warning: "No security risks detected",
+      severity: "none",
+      eventType: "N/A",
+      clientIp: "N/A",
+      sessionKey: "N/A",
+      context: {},
+      riskFactorsExplanation: "No risk factors detected",
+    }];
+  }
 }
 
 module.exports = UserActivity;
