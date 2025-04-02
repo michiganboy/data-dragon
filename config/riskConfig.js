@@ -1,4 +1,7 @@
-// Risk detection configuration
+/**
+ * Risk Configuration Module
+ * Defines risk detection patterns and thresholds for security monitoring
+ */
 const fs = require("fs");
 const chalk = require("chalk");
 const path = require("path");
@@ -945,7 +948,11 @@ const riskConfig = {
   },
 };
 
-// Load custom risk configuration from file
+/**
+ * Loads custom risk configuration from a JSON file
+ * @param {string} configPath - Path to custom config file
+ * @returns {boolean} True if custom config was loaded successfully
+ */
 function loadCustomConfig(configPath) {
   try {
     if (fs.existsSync(configPath)) {
@@ -967,19 +974,27 @@ function loadCustomConfig(configPath) {
           );
         }
       });
+      return true;
     } else {
       console.log(
         chalk.yellow(`[INFO] Custom config file not found: ${configPath}`)
       );
+      return false;
     }
   } catch (error) {
     console.error(
       chalk.red(`[ERROR] Error loading custom config: ${error.message}`)
     );
+    return false;
   }
 }
 
-// Helper function to sanitize config for output (remove functions)
+/**
+ * Sanitizes risk configuration for output in reports
+ * Removes custom detection functions which can't be serialized
+ * @param {Object} config - Risk configuration object
+ * @returns {Object} Sanitized configuration
+ */
 function sanitizeConfigForOutput(config) {
   const sanitized = {};
   Object.entries(config).forEach(([key, value]) => {

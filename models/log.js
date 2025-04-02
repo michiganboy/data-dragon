@@ -1,4 +1,7 @@
-// Enhanced Log processing model with user activity tracking
+/**
+ * Log processor for Salesforce event logs
+ * Filters logs based on user activity and performs risk detection
+ */
 const fs = require("fs");
 const path = require("path");
 const axios = require("axios");
@@ -7,13 +10,25 @@ const config = require("../config/config");
 const utils = require("../lib/utils");
 
 class LogProcessor {
+  /**
+   * Creates a new LogProcessor instance
+   * @param {Object} userMap - Map of userId -> username
+   * @param {Object} riskDetection - Risk detection functions 
+   */
   constructor(userMap, riskDetection) {
     this.userMap = userMap;
     this.riskDetection = riskDetection;
     this.allScannedFiles = [];
   }
 
-  // Download, filter, and optionally save logs if users match
+  /**
+   * Processes a Salesforce event log file
+   * @param {Object} log - Log metadata
+   * @param {Object} tokens - Authentication tokens
+   * @param {string} logDate - Date of the log
+   * @param {Object} headers - HTTP headers
+   * @returns {Promise<Array>} Array of user IDs found in log
+   */
   async processLog(log, tokens, logDate, headers) {
     const { EventType, LogFile } = log;
     const logFileName = `${EventType}_${logDate}.csv`;
@@ -77,7 +92,11 @@ class LogProcessor {
     }
   }
 
-  // Save filtered logs to disk
+  /**
+   * Saves filtered log data to disk as CSV
+   * @param {string} fileName - Name of the file to save
+   * @param {Array} rows - Log data rows to save
+   */
   saveFilteredLog(fileName, rows) {
     if (rows.length === 0) return;
 
@@ -112,7 +131,10 @@ class LogProcessor {
     }
   }
 
-  // Get all scanned files
+  /**
+   * Gets all scanned log files
+   * @returns {Array} Array of scanned files with EventType and logDate
+   */
   getScannedFiles() {
     return this.allScannedFiles;
   }

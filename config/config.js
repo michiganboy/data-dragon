@@ -1,4 +1,7 @@
-// Configuration setup
+/**
+ * Configuration Module
+ * Manages application configuration and environment variables
+ */
 const path = require("path");
 const fs = require("fs");
 
@@ -21,7 +24,9 @@ const EVENT_LOG_DIR = path.join(OUTPUT_DIR, "eventLogs");
 const SUMMARY_JSON = path.join(OUTPUT_DIR, "summary-report.json");
 const SUMMARY_CSV = path.join(OUTPUT_DIR, "summary-report.csv");
 
-// Create necessary directories if they don't exist
+/**
+ * Creates necessary output directories if they don't exist
+ */
 const ensureDirectoriesExist = () => {
   const directories = [OUTPUT_DIR, EVENT_LOG_DIR];
 
@@ -38,7 +43,11 @@ const ensureDirectoriesExist = () => {
   });
 };
 
-// Validate essential configuration
+/**
+ * Validates essential configuration settings
+ * @returns {boolean} True if configuration is valid
+ * @throws {Error} If required variables are missing
+ */
 const validate = () => {
   const requiredVars = [
     "SF_LOGIN_URL",

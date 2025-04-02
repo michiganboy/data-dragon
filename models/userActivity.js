@@ -130,93 +130,18 @@ class UserActivity {
    * @returns {Object[]} Array of detected anomalies
    */
   analyzeLoginPatterns() {
-    // Skip if not enough data
-    if (this.loginTimes.length < 2) {
-      console.log(`[DEBUG] Not enough login times to analyze patterns for user ${this.username}`);
-      return [];
+    // Only analyze if we have login history data
+    if (!this.loginTimes || this.loginTimes.length < 2) {
+      return;
     }
 
-    console.log(`[DEBUG] Analyzing login patterns for user ${this.username} with ${this.loginTimes.length} logins`);
-    const anomalies = [];
-
-    // Analyze time patterns
-    const timePatterns = this.detectTimePatterns();
-    if (timePatterns.unusualHours.length > 0) {
-      anomalies.push({
-        type: "unusual_hours",
-        severity: "medium",
-        description: `Unusual login hours detected: ${timePatterns.unusualHours.join(
-          ", "
-        )}`,
-        details: timePatterns.unusualHours,
-      });
-    }
-
-    // Analyze IP address changes
-    console.log(`[DEBUG] Checking rapid IP changes for ${this.username}`);
-    const ipAnomalies = this.detectRapidIPChanges();
-    console.log(`[DEBUG] Found ${ipAnomalies.length} IP anomalies for ${this.username}`);
+    // Find IP address anomalies
+    const ipAnomalies = this.detectRapidIpChanges();
     
-    if (ipAnomalies.length > 0) {
-      ipAnomalies.forEach((anomaly) => {
-        // Create a more descriptive message using location data if available
-        let description = "";
-        let severity = "critical"; // Set all geographic IP changes to critical
-        
-        if (anomaly.geoInfo && anomaly.distanceDesc) {
-          // Format a clear, human-readable message
-          const timeDiff = anomaly.hours < 1 
-            ? `${Math.round(anomaly.hours * 60)} minutes` 
-            : `${anomaly.hours} hours`;
-            
-          description = `Suspicious rapid location change detected: User logged in from ${anomaly.prevLocation} at ${anomaly.formattedPrevTime}, then from ${anomaly.currLocation} at ${anomaly.formattedCurrTime} (${timeDiff} apart)`;
-          
-          // All geographic location changes are now critical severity
-          if (anomaly.severityMultiplier) {
-            anomaly.severityMultiplier = 2.0; // Ensure high multiplier for all geo changes
-          }
-          
-          console.log(`[DEBUG] Added location anomaly: ${description}`);
-        } else {
-          // Fallback for cases where geo lookup failed
-          description = `Rapid IP change from ${anomaly.from} to ${anomaly.to} (${anomaly.hours} hours apart)`;
-          if (anomaly.prevLocation && anomaly.currLocation) {
-            description += `: ${anomaly.prevLocation} → ${anomaly.currLocation}`;
-          }
-          
-          console.log(`[DEBUG] Added IP change anomaly (no geo): ${description}`);
-        }
-        
-        anomalies.push({
-          type: "rapid_ip_change",
-          severity: severity,
-          description: description,
-          details: anomaly,
-        });
-      });
-    }
-
-    // Analyze weekend activity if user normally doesn't work weekends
-    const weekendAnomalies = this.detectWeekendAnomalies();
-    if (weekendAnomalies.active && weekendAnomalies.unusual) {
-      anomalies.push({
-        type: "weekend_activity",
-        severity: "low",
-        description: "Unusual weekend activity detected",
-        details: weekendAnomalies,
-      });
-    }
-
-    // Store anomalies and update last analysis time
-    this.anomalies = anomalies;
-    this.lastAnalysisDate = new Date().toISOString();
-    
-    console.log(`[DEBUG] Total anomalies found for ${this.username}: ${anomalies.length}`);
-
-    // Calculate overall risk score based on anomalies
-    this.calculateRiskScore();
-
-    return anomalies;
+    // Add anomalies to the user's record
+    ipAnomalies.forEach((anomaly) => {
+      this.anomalies.push(anomaly);
+    });
   }
 
   /**
@@ -269,21 +194,16 @@ class UserActivity {
    * @private
    * @returns {Object[]} Array of rapid IP change anomalies
    */
-  detectRapidIPChanges() {
+  detectRapidIpChanges() {
     const anomalies = [];
     const recentLogins = [...this.loginTimes];
     const geoip = require('geoip-lite');
     
-    // Debug output
-    console.log(`[DEBUG] Checking for rapid IP changes for user ${this.username} (${this.userId})`);
-    console.log(`[DEBUG] Have ${recentLogins.length} login times to analyze`);
-
     // Sort login times chronologically
     recentLogins.sort((a, b) => a.datetime - b.datetime);
 
     // Need at least 2 logins to detect changes
     if (recentLogins.length < 2) {
-      console.log(`[DEBUG] Not enough logins to check for rapid IP changes for user ${this.username}`);
       return anomalies;
     }
 
@@ -292,37 +212,22 @@ class UserActivity {
       const prevLogin = recentLogins[i - 1];
       const currLogin = recentLogins[i];
 
-      // Debug the IPs
-      console.log(`[DEBUG] Comparing IPs: ${prevLogin.sourceIp || 'unknown'} vs ${currLogin.sourceIp || 'unknown'}`);
-
-      // If IP information isn't available, skip
-      if (!prevLogin.sourceIp || !currLogin.sourceIp) {
-        console.log(`[DEBUG] Missing source IP for comparison, skipping`);
-        continue;
-      }
-
       // Skip if same IP
       if (prevLogin.sourceIp === currLogin.sourceIp) {
-        console.log(`[DEBUG] Same IP, skipping`);
         continue;
       }
 
       // Calculate hours between logins
       const hoursDiff = (currLogin.datetime - prevLogin.datetime) / (1000 * 60 * 60);
-      console.log(`[DEBUG] Time difference: ${hoursDiff.toFixed(2)} hours`);
 
       // Only check within 4 hour window (restored from 1 hour for wider detection)
       if (hoursDiff >= 4) {
-        console.log(`[DEBUG] Time difference exceeds threshold (4 hours), skipping`);
         continue;
       }
 
       // Look up geographic locations
       const prevGeo = geoip.lookup(prevLogin.sourceIp);
       const currGeo = geoip.lookup(currLogin.sourceIp);
-      
-      console.log(`[DEBUG] Geo lookup results: Previous IP ${prevLogin.sourceIp}: ${prevGeo ? JSON.stringify(prevGeo) : 'lookup failed'}`);
-      console.log(`[DEBUG] Geo lookup results: Current IP ${currLogin.sourceIp}: ${currGeo ? JSON.stringify(currGeo) : 'lookup failed'}`);
 
       // Format time for better readability
       const prevTime = prevLogin.datetime.toLocaleTimeString('en-US', {
@@ -339,7 +244,6 @@ class UserActivity {
 
       // If either geo lookup failed, fall back to IP comparison
       if (!prevGeo || !currGeo) {
-        console.log(`[DEBUG] One or both geo lookups failed, using fallback IP comparison`);
         anomalies.push({
           from: prevLogin.sourceIp,
           to: currLogin.sourceIp,
@@ -357,7 +261,6 @@ class UserActivity {
 
       // Skip if same country and city (same location despite different IPs)
       if (prevGeo.country === currGeo.country && prevGeo.city === currGeo.city) {
-        console.log(`[DEBUG] Same location (country and city) despite different IPs, skipping`);
         continue;
       }
 
@@ -365,12 +268,9 @@ class UserActivity {
       const prevLocation = prevGeo.city ? `${prevGeo.city}, ${prevGeo.country}` : prevGeo.country;
       const currLocation = currGeo.city ? `${currGeo.city}, ${currGeo.country}` : currGeo.country;
 
-      console.log(`[DEBUG] Different locations detected: ${prevLocation} to ${currLocation}`);
-
       // Now any geographic change is considered high risk
       // Higher severity if countries are different
       if (prevGeo.country !== currGeo.country) {
-        console.log(`[DEBUG] ADDING LOCATION ANOMALY: Different countries detected`);
         anomalies.push({
           from: prevLogin.sourceIp,
           to: currLogin.sourceIp,
@@ -388,7 +288,6 @@ class UserActivity {
       }
       // City changes within the same country are also treated as high risk now
       else if (prevGeo.city !== currGeo.city) {
-        console.log(`[DEBUG] ADDING LOCATION ANOMALY: Different cities detected in same country`);
         anomalies.push({
           from: prevLogin.sourceIp,
           to: currLogin.sourceIp,
@@ -406,7 +305,6 @@ class UserActivity {
       }
     }
 
-    console.log(`[DEBUG] Finished checking rapid IP changes, found ${anomalies.length} anomalies`);
     return anomalies;
   }
 

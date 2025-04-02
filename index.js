@@ -1,4 +1,7 @@
-// Enhanced main entry point for DataDragon with user activity tracking
+/**
+ * DataDragon Main Entry Point
+ * Security monitoring and reporting tool for Salesforce event logs
+ */
 require("dotenv").config();
 const chalk = require("chalk");
 const boxen = require("boxen");
@@ -12,7 +15,9 @@ const { loadTargetUsers } = require("./lib/userLoader");
 const { startProcessing } = require("./lib/riskDetection");
 const { displayBanner } = require("./lib/utils");
 
-// Ensure directories exist
+/**
+ * Creates necessary output directories
+ */
 const ensureDirectoriesExist = () => {
   const dirs = [
     path.join(process.cwd(), "output"),
@@ -30,7 +35,10 @@ const ensureDirectoriesExist = () => {
 // Create necessary directories
 ensureDirectoriesExist();
 
-// Main function with enhanced CLI options
+/**
+ * Main application function
+ * Processes command line arguments and initiates security analysis
+ */
 async function main() {
   try {
     // Process command line arguments
@@ -66,7 +74,11 @@ async function main() {
   }
 }
 
-// Parse command line arguments with enhanced options
+/**
+ * Parses command line arguments into options object
+ * @param {string[]} args - Command line arguments
+ * @returns {Object} Options object with parsed values
+ */
 function parseCommandLineArgs(args) {
   const options = {
     debug: false,
