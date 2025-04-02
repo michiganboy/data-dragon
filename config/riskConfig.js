@@ -194,9 +194,43 @@ const riskConfig = {
     rationale: "Could indicate compromised credentials",
     countField: "SOURCE_IP",
     timeWindow: "day",
+    customDetection: (row) => {
+      // Skip if IP is not present
+      if (!row.SOURCE_IP) {
+        return null;
+      }
+      
+      const ipAddress = row.SOURCE_IP;
+      
+      try {
+        // Look up IP location
+        const geo = geoip.lookup(ipAddress);
+        
+        // If geo lookup failed or is null
+        if (!geo) {
+          return null;
+        }
+        
+        // Check if outside US (country code not 'US')
+        // This is for backward compatibility - international logins will be detected here too
+        if (geo.country !== 'US') {
+          return {
+            customMessage: `Login from international location: ${geo.country} (${geo.city || 'Unknown City'}) via IP ${ipAddress}`,
+            severityMultiplier: 2.0,
+            eventType: "InternationalLogin" // Override the event type to help with reporting
+          };
+        }
+      } catch (error) {
+        // In case of error in geoip lookup, just log and continue
+        console.error(`Error looking up IP ${ipAddress}: ${error.message}`);
+      }
+      
+      return null;
+    }
   },
+  // Dedicated event type for international logins
   InternationalLogin: {
-    description: "Login from outside US",
+    description: "International Login",
     threshold: 1,
     severity: "critical",
     rationale: "Non-US login represents significant security risk",
@@ -222,8 +256,9 @@ const riskConfig = {
         // Check if outside US (country code not 'US')
         if (geo.country !== 'US') {
           return {
-            customMessage: `Login from international location: ${geo.country} (${geo.city || 'Unknown City'}) via IP ${ipAddress}`,
-            severityMultiplier: 2.0
+            customMessage: `International login detected: ${geo.country} (${geo.city || 'Unknown City'}) via IP ${ipAddress}`,
+            severityMultiplier: 2.0,
+            priority: true // Mark as priority for reporting
           };
         }
       } catch (error) {
