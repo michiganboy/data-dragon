@@ -16,6 +16,7 @@ DataDragon is a powerful security investigation tool designed to analyze suspici
 - 👤 **User Activity Tracking**: Analyzes login patterns and detects behavioral anomalies
 - 🚨 **Severity-Based Alerting**: Critical, High, Medium and Low risk classifications
 - 📊 **Comprehensive Reporting**: Detailed CSV reports with context-rich data
+- 📄 **PDF Reports**: Professional PDF security reports with visualizations and risk analytics
 - 🔄 **Token Caching**: Minimizes authentication requirements
 - 🎨 **Themed Console Output**: Clear, colorful, dragon-themed alerts
 
@@ -105,6 +106,7 @@ DataDragon produces the following output files:
 - **output/tokens.json**: Cached authentication tokens
 - **output/summary-report.json**: JSON data that could be used for generating additional reports
 - **output/summary-report.csv**: CSV report of all detected risks with detailed context information
+- **output/reports/security-report.pdf**: PDF security report with visualizations (when using --pdf option)
 
 The CSV report includes:
 
@@ -228,10 +230,15 @@ You can create a `risk-config.json` file to override default risk thresholds:
 DataDragon supports several command line options:
 
 ```
---debug           Enable debug logging
---days=7          Only scan logs from the last 7 days
---config=path     Specify a custom risk config file
---output=path     Custom location for output files
+--debug               Enable debug logging
+--days=7              Only scan logs from the last 7 days
+--config=path         Specify a custom risk config file
+--output=path         Custom location for output files
+--pdf                 Generate PDF security report
+--pdf-title="Title"   Custom title for PDF report
+--pdf-org="Org Name"  Organization name for PDF report
+--pdf-output=path     Custom location for PDF report
+--pdf-no-appendix     Exclude appendix section from PDF report
 ```
 
 ## 🔍 Security Investigation Best Practices
@@ -258,6 +265,12 @@ datadragon/
 │   ├── riskCorrelation.js    # Risk correlation engine
 │   ├── riskDetection.js      # Risk detection logic
 │   ├── reporting.js          # Report generation
+│   ├── reporting/            # Advanced reporting functionality
+│   │   └── pdf/              # PDF reporting module
+│   │       ├── generator.js  # PDF generation engine
+│   │       ├── components/   # Reusable PDF components
+│   │       ├── templates/    # PDF report templates
+│   │       └── utils/        # PDF utility functions
 │   ├── userLoader.js         # User loading functionality
 │   └── utils.js              # Utility functions
 ├── models/                   # Data models
@@ -266,7 +279,9 @@ datadragon/
 └── output/                   # Output directories
     ├── tokens.json           # Authentication tokens
     ├── summary-report.json   # JSON report
-    └── summary-report.csv    # CSV report
+    ├── summary-report.csv    # CSV report
+    └── reports/              # PDF reports directory
+        └── security-report.pdf # PDF security report
 ```
 
 ## 📜 License

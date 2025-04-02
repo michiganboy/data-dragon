@@ -17,6 +17,7 @@ const ensureDirectoriesExist = () => {
   const dirs = [
     path.join(process.cwd(), "output"),
     path.join(process.cwd(), "output/eventLogs"),
+    path.join(process.cwd(), "output/reports"),
   ];
 
   dirs.forEach((dir) => {
@@ -74,6 +75,8 @@ function parseCommandLineArgs(args) {
     output: null,
     correlationWindow: 2, // Hours to look for correlations between login anomalies and security events
     noUserActivity: false, // Option to disable user activity analysis for troubleshooting
+    pdf: false,
+    pdfOptions: {},
   };
 
   args.forEach((arg) => {
@@ -95,6 +98,16 @@ function parseCommandLineArgs(args) {
       }
     } else if (arg === "--no-user-activity") {
       options.noUserActivity = true;
+    } else if (arg === "--pdf" || arg === "--generate-pdf") {
+      options.pdf = true;
+    } else if (arg.startsWith("--pdf-title=")) {
+      options.pdfOptions.title = arg.split("=")[1];
+    } else if (arg.startsWith("--pdf-org=")) {
+      options.pdfOptions.organization = arg.split("=")[1];
+    } else if (arg.startsWith("--pdf-output=")) {
+      options.pdfOptions.outputPath = arg.split("=")[1];
+    } else if (arg === "--pdf-no-appendix") {
+      options.pdfOptions.includeAppendix = false;
     }
   });
 
