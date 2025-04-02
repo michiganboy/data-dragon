@@ -614,10 +614,112 @@ class UserActivity {
           const timeInfo = locationMatch[3] ? ` ${locationMatch[3].trim()}` : '';
           return `Suspicious login location change: ${fromLocation} to ${toLocation}${timeInfo}`;
         }
+        
+        // Fallback to simple replacement
+        return cleanFactor.replace(/^LOCATION_CHANGE: /, '')
+                         .replace(/CRITICAL - .*?(Geographic|Suspicious) location change: /, 'Suspicious login location change: ');
       }
       
+      // Only transform other location change messages that specifically match the pattern
+      if (cleanFactor.includes('CRITICAL - Geographic location change:') ||
+          cleanFactor.includes('CRITICAL - Suspicious login location change:')) {
+        
+        // Extract the locations and timing info
+        const locationMatch = cleanFactor.match(/: ([^:]+) to ([^(]+)(\([^)]+\))?/);
+        if (locationMatch && locationMatch.length >= 3) {
+          const fromLocation = locationMatch[1].trim();
+          const toLocation = locationMatch[2].trim();
+          const timeInfo = locationMatch[3] ? ` ${locationMatch[3].trim()}` : '';
+          return `Suspicious login location change: ${fromLocation} to ${toLocation}${timeInfo}`;
+        }
+        
+        // Fallback to simple replacement
+        return cleanFactor.replace(/CRITICAL - .*?(Geographic|Suspicious) location change: /, 'Suspicious login location change: ')
+                         .replace(/at'([^']+)'/, 'at $1')
+                         .replace(/([A-Za-z]) át' ([A-Za-z])/, '$1 at $2')
+                         .replace(/([A-Za-z]) àt' ([A-Za-z])/, '$1 at $2')
+                         .replace(/in US \([^)]+\)/, '');
+      }
+      
+      // Remove Warning prefix from all other messages but keep event type prefixes
+      if (cleanFactor.startsWith('Warning - ')) {
+        return cleanFactor.replace(/^Warning - /, '');
+      }
+      
+      // Return as is if it doesn't match the above patterns
       return cleanFactor;
     });
+  }
+
+  /**
+   * Get a summary of this user's activity
+   * @returns {Object} User activity summary
+   */
+  getSummary() {
+    // Calculate risk score if not already done
+    if (
+      this.riskScore === 0 &&
+      (this.anomalies.length > 0 || this.warnings.length > 0)
+    ) {
+      this.calculateRiskScore();
+    }
+
+    return {
+      userId: this.userId,
+      username: this.username,
+      loginStats: {
+        totalDays: this.loginDays.length,
+        firstLogin: this.loginDays[0] || "N/A",
+        lastLogin: this.loginDays[this.loginDays.length - 1] || "N/A",
+        uniqueIPs: this.ipAddresses.size,
+        uniqueLocations: this.knownLocations.size,
+      },
+      warningsCount: {
+        total: this.warnings.length,
+        critical: this.warnings.filter((w) => w.severity === "critical").length,
+        high: this.warnings.filter((w) => w.severity === "high").length,
+        medium: this.warnings.filter((w) => w.severity === "medium").length,
+        low: this.warnings.filter((w) => w.severity === "low" || !w.severity)
+          .length,
+      },
+      scannedLogs: Object.fromEntries(this.scannedLogs),
+      anomalies: this.anomalies,
+      riskScore: this.riskScore,
+      riskLevel: this.getRiskLevel(),
+      criticalEvents: this.criticalEvents,
+      highRiskEvents: this.highRiskEvents,
+      riskFactors: this.riskFactors || [],
+    };
+  }
+
+  /**
+   * Get overall risk level based on risk score and critical event counts
+   * @returns {string} Risk level (critical, high, medium, low, none)
+   */
+  getRiskLevel() {
+    // Format risk factors for better readability
+    this.formatRiskFactors();
+    
+    // If there are critical events, automatically assign critical risk
+    if (this.criticalEvents > 0) {
+      return "critical";
+    }
+
+    // If there are high risk events, automatically assign high risk
+    if (this.highRiskEvents > 0) {
+      return "high";
+    }
+
+    // For other events, use score thresholds
+    if (this.warnings.length > 0 || this.anomalies.length > 0) {
+      if (this.riskScore >= 100) return "critical";
+      if (this.riskScore >= 75) return "high";
+      if (this.riskScore >= 50) return "medium";
+      if (this.riskScore > 20) return "low";
+    }
+
+    // If no warnings or anomalies, always return 'none'
+    return "none";
   }
 }
 
