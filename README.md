@@ -16,7 +16,7 @@ DataDragon is a powerful security investigation tool designed to analyze suspici
 - 👤 **User Activity Tracking**: Analyzes login patterns and detects behavioral anomalies
 - 🚨 **Severity-Based Alerting**: Critical, High, Medium and Low risk classifications
 - 📊 **Comprehensive Reporting**: Detailed CSV reports with context-rich data
-- 📄 **PDF Reports**: Professional PDF security reports with visualizations and risk analytics
+- 📄 **PDF Reports**: Professional PDF security reports with visualizations
 - 🔄 **Token Caching**: Minimizes authentication requirements
 - 🎨 **Themed Console Output**: Clear, colorful, dragon-themed alerts
 
