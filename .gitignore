@@ -17,7 +17,6 @@ output/tokens.json
 # Report output files
 output/*.csv
 output/*.json
-output/reports/*.pdf
 output/reports/*.html
 
 # Event log files
