@@ -506,4 +506,59 @@ a:hover {
   .page-break {
     page-break-after: always;
   }
+}
+
+/* Print button */
+.print-button {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 60px;
+  height: 60px;
+  font-size: 24px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.3s, transform 0.2s;
+}
+
+.print-button:hover {
+  background-color: var(--primary-dark);
+  transform: scale(1.05);
+}
+
+.print-button:active {
+  transform: scale(0.95);
+}
+
+/* Hide print button when printing */
+@media print {
+  body {
+    background-color: white;
+  }
+  
+  .container {
+    max-width: none;
+    padding: 0;
+  }
+  
+  .main-content {
+    box-shadow: none;
+    padding: 0;
+  }
+  
+  .page-break {
+    page-break-after: always;
+  }
+  
+  .print-button {
+    display: none;
+  }
 } 

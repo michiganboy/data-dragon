@@ -80,14 +80,17 @@ async function main() {
  * @returns {Object} Options object with parsed values
  */
 function parseCommandLineArgs(args) {
-  const options = {
-    debug: false,
-    days: null,
+  // Default options
+  let options = {
+    mode: "production",
     config: null,
     output: null,
+    filter: null,
+    startDate: null,
+    endDate: null,
+    maxDays: 30,
     correlationWindow: 2, // Hours to look for correlations between login anomalies and security events
     noUserActivity: false, // Option to disable user activity analysis for troubleshooting
-    pdfOptions: {}, // PDF configuration options - PDF is always generated
   };
 
   args.forEach((arg) => {
@@ -109,14 +112,6 @@ function parseCommandLineArgs(args) {
       }
     } else if (arg === "--no-user-activity") {
       options.noUserActivity = true;
-    } else if (arg.startsWith("--pdf-title=")) {
-      options.pdfOptions.title = arg.split("=")[1];
-    } else if (arg.startsWith("--pdf-org=")) {
-      options.pdfOptions.organization = arg.split("=")[1];
-    } else if (arg.startsWith("--pdf-output=")) {
-      options.pdfOptions.outputPath = arg.split("=")[1];
-    } else if (arg === "--pdf-no-appendix") {
-      options.pdfOptions.includeAppendix = false;
     }
   });
 

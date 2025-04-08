@@ -1,5 +1,5 @@
 /**
- * Test script for HTML/PDF report generation
+ * Test script for HTML report generation
  */
 require('dotenv').config();
 const path = require('path');
@@ -83,13 +83,13 @@ function createTestData() {
 }
 
 // Main test function
-async function testPdfGeneration() {
+async function testReportGeneration() {
   try {
     console.log('Creating test data...');
     const userActivities = createTestData();
     
-    console.log('Generating PDF report...');
-    const outputPath = path.join(process.cwd(), 'output/reports', 'test-report.pdf');
+    console.log('Generating security report...');
+    const outputPath = path.join(process.cwd(), 'output/reports', 'test-report.html');
     
     const result = await htmlReportGenerator.generateSecurityReport({
       userActivities,
@@ -101,12 +101,14 @@ async function testPdfGeneration() {
       }
     });
     
-    console.log(`PDF report generated at: ${result}`);
-    console.log('HTML debug version is also available in the same directory.');
+    console.log('Report generated successfully:');
+    console.log(`HTML report: ${result.htmlPath}`);
+    console.log('To view the report, open the HTML file in your browser.');
+    console.log('You can print it to PDF using your browser\'s print function.');
   } catch (error) {
     console.error('Error generating report:', error);
   }
 }
 
 // Run the test
-testPdfGeneration(); 
+testReportGeneration(); 

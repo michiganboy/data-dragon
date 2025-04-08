@@ -16,7 +16,7 @@ DataDragon is a powerful security investigation tool designed to analyze suspici
 - 👤 **User Activity Tracking**: Analyzes login patterns and detects behavioral anomalies
 - 🚨 **Severity-Based Alerting**: Critical, High, Medium and Low risk classifications
 - 📊 **Comprehensive Reporting**: Detailed CSV reports with context-rich data
-- 📄 **PDF Reports**: Professional PDF security reports with visualizations
+- 📄 **HTML Reports**: Professional security reports with visualizations and print-to-PDF function
 - 🔄 **Token Caching**: Minimizes authentication requirements
 - 🎨 **Themed Console Output**: Clear, colorful, dragon-themed alerts
 
@@ -106,12 +106,12 @@ DataDragon automatically generates the following output files:
 - **output/tokens.json**: Cached authentication tokens
 - **output/summary-report.json**: JSON report with detailed findings and statistics
 - **output/summary-report.csv**: CSV report of all detected risks with detailed context information
-- **output/reports/security-report.pdf**: PDF security report with visualizations and risk analytics
+- **output/reports/security-report.html**: HTML security report with visualizations and risk analytics
 
 The reports provide different views of the same security findings:
 - **JSON**: Structured data for programmatic analysis or import into other tools
 - **CSV**: Tabular data for spreadsheet analysis and detailed investigation
-- **PDF**: Professional report with executive summary and visualization for presentation
+- **HTML**: Professional report with executive summary and visualization for presentation, printable to PDF using the browser
 
 ## 🧠 Enhanced Risk Assessment System
 
@@ -229,13 +229,13 @@ DataDragon supports several command line options:
 --days=7              Only scan logs from the last 7 days
 --config=path         Specify a custom risk config file
 --output=path         Custom location for output files
---pdf-title="Title"   Custom title for PDF report
---pdf-org="Org Name"  Organization name for PDF report
---pdf-output=path     Custom location for PDF report (default: output/reports/security-report.pdf)
---pdf-no-appendix     Exclude appendix section from PDF report
+--report-title="Title"   Custom title for HTML report
+--report-org="Org Name"  Organization name for HTML report
+--report-output=path     Custom location for HTML report (default: output/reports/security-report.html)
+--report-no-appendix     Exclude appendix section from HTML report
 ```
 
-PDF reports are automatically generated in the output/reports directory along with CSV and JSON reports.
+HTML reports are automatically generated in the output/reports directory along with CSV and JSON reports.
 
 ## 🔍 Security Investigation Best Practices
 
@@ -262,11 +262,13 @@ datadragon/
 │   ├── riskDetection.js      # Risk detection logic
 │   ├── reporting.js          # Report generation
 │   ├── reporting/            # Advanced reporting functionality
-│   │   └── pdf/              # PDF reporting module
-│   │       ├── generator.js  # PDF generation engine
-│   │       ├── components/   # Reusable PDF components
-│   │       ├── templates/    # PDF report templates
-│   │       └── utils/        # PDF utility functions
+│   │   └── html/              # HTML reporting module
+│   │       ├── generator.js   # HTML generation engine
+│   │       ├── css/           # CSS styles for reports
+│   │       ├── assets/        # JavaScript and other assets
+│   │       ├── components/    # Reusable HTML components
+│   │       ├── templates/     # HTML report templates
+│   │       └── utils/         # HTML utility functions
 │   ├── userLoader.js         # User loading functionality
 │   └── utils.js              # Utility functions
 ├── models/                   # Data models
@@ -276,8 +278,8 @@ datadragon/
     ├── tokens.json           # Authentication tokens
     ├── summary-report.json   # JSON report
     ├── summary-report.csv    # CSV report
-    └── reports/              # PDF reports directory
-        └── security-report.pdf # PDF security report
+    └── reports/              # Reports directory
+        └── security-report.html # HTML security report
 ```
 
 ## 📜 License
