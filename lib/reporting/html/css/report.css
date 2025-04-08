@@ -448,6 +448,7 @@ a:hover {
 .chart-box {
   flex: 1;
   min-width: 300px;
+  height: 400px;
   background-color: var(--card-background);
   border-radius: 4px;
   padding: var(--spacing-lg);
@@ -561,4 +562,15 @@ a:hover {
   .print-button {
     display: none;
   }
+}
+
+/* Chart center text for risk score */
+.chart-center-text {
+  position: absolute;
+  top: 65%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 2rem;
+  font-weight: bold;
+  z-index: 1;
 } 
