@@ -17,7 +17,11 @@ output/tokens.json
 # Report output files
 output/*.csv
 output/*.json
-!output/.gitkeep
+output/reports/*.pdf
+output/reports/*.html
+
+# Event log files
+output/eventLogs/*
 
 # macOS
 .DS_Store
