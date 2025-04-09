@@ -122,8 +122,8 @@ a:hover {
 }
 
 .cover-page .logo {
-  max-width: 200px;
-  margin-bottom: var(--spacing-xl);
+  max-width: 500px;
+  margin-bottom: var(--spacing-xxl);
 }
 
 .cover-page h1 {
