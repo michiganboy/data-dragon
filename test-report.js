@@ -2,93 +2,94 @@
  * Test script for HTML report generation
  */
 require('dotenv').config();
+const fs = require('fs');
 const path = require('path');
 const htmlReportGenerator = require('./lib/reporting/html/generator');
 const UserActivity = require('./models/userActivity');
 
-// Create a minimal test dataset
-function createTestData() {
-  const userActivities = new Map();
-  
-  // Create a test user with high risk
-  const user1 = new UserActivity('001', 'test.user@example.com');
-  user1.riskScore = 75;
-  user1.riskLevel = 'high';
-  user1.criticalEvents = 1;
-  user1.highRiskEvents = 3;
-  
-  // Add login history
-  const now = new Date();
-  user1.loginDays = [
-    '2023-04-01',
-    '2023-04-02',
-    '2023-04-03',
-  ];
-  
-  user1.loginTimes = [
-    {
-      datetime: now,
-      dayOfWeek: now.getDay(),
-      hourOfDay: now.getHours(),
-      sourceIp: '192.168.1.1'
-    }
-  ];
-  
-  // Add some test warnings
-  user1.warnings = [
-    {
-      date: now.toISOString(),
-      timestamp: now.toISOString(),
-      message: 'Suspicious login location change: US to Australia (2 hours)',
-      severity: 'critical',
-      eventType: 'LocationChange'
-    },
-    {
-      date: new Date(now.getTime() - 86400000).toISOString(), // Yesterday
-      timestamp: new Date(now.getTime() - 86400000).toISOString(),
-      message: 'Report export detected',
-      severity: 'high',
-      eventType: 'ReportExport'
-    },
-    {
-      date: new Date(now.getTime() - 172800000).toISOString(), // 2 days ago
-      timestamp: new Date(now.getTime() - 172800000).toISOString(),
-      message: 'Multiple dashboard access (35 in 1 hour)',
-      severity: 'medium',
-      eventType: 'Dashboard'
-    }
-  ];
-  
-  // Add to map
-  userActivities.set('001', user1);
-  
-  // Add a second user with low risk
-  const user2 = new UserActivity('002', 'low.risk@example.com');
-  user2.riskScore = 15;
-  user2.riskLevel = 'low';
-  user2.loginDays = ['2023-04-01', '2023-04-02'];
-  user2.warnings = [
-    {
-      date: new Date(now.getTime() - 86400000).toISOString(),
-      timestamp: new Date(now.getTime() - 86400000).toISOString(),
-      message: 'Bulk API usage (15 in 1 hour)',
-      severity: 'low',
-      eventType: 'BulkApiRequest'
-    }
-  ];
-  
-  userActivities.set('002', user2);
-  
-  return userActivities;
-}
-
 // Main test function
 async function testReportGeneration() {
   try {
-    console.log('Creating test data...');
-    const userActivities = createTestData();
+    console.log('Loading mock data...');
     
-    console.log('Generating security report...');
+    // Check if mock data exists, if not, suggest generating it
+    const summaryJsonPath = path.join(process.cwd(), 'output', 'summary-report.json');
+    if (!fs.existsSync(summaryJsonPath)) {
+      console.log('Mock data not found. Please run "node generate-mock-data.js" first.');
+      return;
+    }
+    
+    // Load the mock data JSON
+    const mockData = JSON.parse(fs.readFileSync(summaryJsonPath, 'utf8'));
+    
+    // Create UserActivity objects from the mock data
+    const userActivities = new Map();
+    
+    if (mockData.userSummary) {
+      // Create user activities from the summary
+      Object.entries(mockData.userSummary).forEach(([username, userData]) => {
+        const activity = new UserActivity(userData.userId, username);
+        
+        // Set properties
+        activity.riskScore = userData.riskScore || 0;
+        activity.riskLevel = userData.riskLevel || 'low';
+        activity.criticalEvents = userData.criticalEvents || 0;
+        activity.highRiskEvents = userData.highRiskEvents || 0;
+        
+        // Add warnings
+        if (Array.isArray(userData.warnings)) {
+          userData.warnings.forEach(warning => {
+            activity.addWarning(warning);
+          });
+        }
+        
+        // Add anomalies if available
+        if (Array.isArray(userData.anomalies)) {
+          userData.anomalies = userData.anomalies;
+          
+          // Also convert to warnings for better visibility in the report
+          userData.anomalies.forEach(anomaly => {
+            const warningMessage = anomaly.description || 'Security anomaly detected';
+            const warning = {
+              date: anomaly.date,
+              timestamp: anomaly.date,
+              warning: warningMessage + (anomaly.details && anomaly.details.distanceDesc ? `: ${anomaly.details.distanceDesc}` : ''),
+              severity: anomaly.severity || 'medium',
+              eventType: 'SecurityAnomaly',
+              context: anomaly.details || {}
+            };
+            activity.addWarning(warning);
+          });
+        }
+        
+        // Add login data if available
+        if (userData.loginActivity) {
+          if (userData.loginActivity.firstLogin && userData.loginActivity.lastLogin) {
+            activity.loginDays = [
+              userData.loginActivity.firstLogin,
+              userData.loginActivity.lastLogin
+            ];
+          }
+          
+          // Add login times if available
+          if (Array.isArray(userData.loginTimes)) {
+            activity.loginTimes = userData.loginTimes.map(login => ({
+              datetime: new Date(login.datetime),
+              dayOfWeek: new Date(login.datetime).getDay(),
+              hourOfDay: new Date(login.datetime).getHours(),
+              sourceIp: login.sourceIp || '192.168.1.1',
+              weekend: [0, 6].includes(new Date(login.datetime).getDay())
+            }));
+          }
+        }
+        
+        userActivities.set(userData.userId, activity);
+      });
+    }
+    
+    console.log(`Creating report for ${userActivities.size} users...`);
+    
+    // Output path for the report
     const outputPath = path.join(process.cwd(), 'output/reports', 'test-report.html');
     
     const result = await htmlReportGenerator.generateSecurityReport({
@@ -96,7 +97,7 @@ async function testReportGeneration() {
       outputPath,
       reportOptions: {
         title: 'Test Security Report',
-        dateRange: 'April 1-3, 2023',
+        dateRange: 'Generated from mock data',
         organization: 'Test Organization'
       }
     });

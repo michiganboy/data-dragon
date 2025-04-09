@@ -567,10 +567,60 @@ a:hover {
 /* Chart center text for risk score */
 .chart-center-text {
   position: absolute;
-  top: 65%;
+  top: 72%;
   left: 50%;
   transform: translate(-50%, -50%);
   font-size: 2rem;
   font-weight: bold;
   z-index: 1;
+}
+
+/* Gauge chart styling */
+.gauge-indicator-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  pointer-events: none;
+}
+
+.gauge-score {
+  position: absolute;
+  top: 65%;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 2rem;
+  font-weight: bold;
+  z-index: 10;
+}
+
+.gauge-needle {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  margin-left: -1.5px;
+  width: 3px;
+  height: 85px;
+  background-color: #000000;
+  transform-origin: bottom center;
+  border-radius: 4px 4px 0 0;
+  box-shadow: 0 0 3px rgba(0, 0, 0, 0.5);
+  z-index: 100;
+}
+
+.gauge-needle-pivot {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  margin-left: -6px;
+  width: 12px;
+  height: 12px;
+  background-color: #000000;
+  border-radius: 50%;
+  box-shadow: 0 0 3px rgba(0, 0, 0, 0.5);
+  z-index: 101;
 } 
