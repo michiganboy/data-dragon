@@ -507,6 +507,20 @@ a:hover {
   .page-break {
     page-break-after: always;
   }
+
+  /* Cover page print styles */
+  .cover-page {
+    background-color: white !important;
+  }
+
+  .cover-page h1,
+  .cover-page .subtitle,
+  .cover-page .date-range,
+  .cover-page .confidential,
+  .cover-page * {  /* This ensures ALL elements within cover-page are black */
+    color: black !important;
+    opacity: 1 !important;
+  }
 }
 
 /* Print button */
