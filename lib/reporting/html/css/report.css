@@ -517,9 +517,38 @@ a:hover {
   .cover-page .subtitle,
   .cover-page .date-range,
   .cover-page .confidential,
-  .cover-page * {  /* This ensures ALL elements within cover-page are black */
+  .cover-page * {
     color: black !important;
     opacity: 1 !important;
+  }
+
+  /* Preserve risk badge colors in print */
+  .risk-badge {
+    color: white !important;
+    opacity: 1 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .risk-badge.risk-critical {
+    background-color: var(--risk-critical) !important;
+  }
+
+  .risk-badge.risk-high {
+    background-color: var(--risk-high) !important;
+  }
+
+  .risk-badge.risk-medium {
+    background-color: var(--risk-medium) !important;
+    color: var(--text-dark) !important;
+  }
+
+  .risk-badge.risk-low {
+    background-color: var(--risk-low) !important;
+  }
+
+  .risk-badge.risk-none {
+    background-color: var(--text-light) !important;
   }
 }
 
