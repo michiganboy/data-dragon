@@ -36,6 +36,7 @@ function generateMockSummaryData() {
     'LoginAs', 
     'ContentDistribution',
     'DocumentAttachmentDownloads',
+    'ContentTransfer',
     'ApexExecution',
     'BulkApiRequest',
     'DataExport',
@@ -330,6 +331,11 @@ function getWarningMessageForEvent(eventType) {
       "Public link created for sensitive document",
       "Multiple documents shared externally",
       "Document shared with external domain"
+    ],
+    ContentTransfer: [
+      "Suspicious file transfer activity",
+      "Bulk data transfer detected",
+      "Unauthorized content synchronization"
     ],
     DocumentAttachmentDownloads: [
       "Mass download of attachments",

@@ -166,7 +166,8 @@ DataDragon monitors for the following types of suspicious activity:
 | --------------------------- | ---------------------------------------- | ---------- | --------------------------------------- |
 | ReportExport                | Report Export                            | Critical   | Every export is a potential data exfiltration risk |
 | DocumentAttachmentDownloads | Document Download                        | Critical   | Every download is a potential data exfiltration risk |
-| ContentDocumentLink         | Excessive Internal Sharing (>20/hour)    | Medium     | May indicate staging for exfiltration   |
+| ContentTransfer             | File Transfer Activity (>5/hour)         | High       | File transfers may indicate data exfiltration |
+| ContentDocumentLink           | Excessive Internal Sharing (>20/hour)    | Medium     | May indicate staging for exfiltration   |
 | ContentDistribution         | Public Sharing Activity (>5)             | Critical   | Significant data exposure risk          |
 | Login                       | Multiple IP Logins (>3)                  | High       | Could indicate compromised credentials  |
 | LoginAs                     | Admin Impersonation                      | High       | Admin impersonation warrants review     |

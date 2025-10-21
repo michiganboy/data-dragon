@@ -77,6 +77,7 @@ async function startProcessing(tokens, options = {}) {
                  'LoginAs', 
                  'ContentDistribution',
                  'DocumentAttachmentDownloads',
+                 'ContentTransfer',
                  'ApexExecution',
                  'BulkApiRequest',
                  'PermissionSetAssignment',

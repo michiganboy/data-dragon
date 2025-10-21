@@ -190,6 +190,71 @@ const riskConfig = {
     countField: "CONTENT_ID",
     timeWindow: "day",
   },
+  ContentTransfer: {
+    description: "Content Transfer Activity",
+    threshold: 5,
+    severity: "high",
+    rationale: "File transfers may indicate data exfiltration",
+    countField: null,
+    timeWindow: "hour",
+    customDetection: (row) => {
+      // Track total count for alerting (5 total events)
+      // But also track individual TRANSACTION_TYPE counts for reporting
+      
+      if (!row.USER_ID_DERIVED || !row.TIMESTAMP_DERIVED) {
+        return null;
+      }
+
+      const userId = row.USER_ID_DERIVED;
+      const currentTime = new Date(row.TIMESTAMP_DERIVED);
+      const hour = currentTime.getHours();
+      const trackingKey = `${userId}-${hour}`;
+
+      // Initialize tracking if it doesn't exist
+      if (!global.contentTransferTracking) {
+        global.contentTransferTracking = new Map();
+      }
+
+      // Initialize tracking for this user-hour combination
+      if (!global.contentTransferTracking.has(trackingKey)) {
+        global.contentTransferTracking.set(trackingKey, {
+          totalCount: 0,
+          transactionTypes: new Map(),
+          firstAccess: currentTime,
+          lastAccess: currentTime,
+          alerted: false
+        });
+      }
+
+      const tracking = global.contentTransferTracking.get(trackingKey);
+      tracking.totalCount++;
+      tracking.lastAccess = currentTime;
+
+      // Track individual transaction types
+      const transactionType = row.TRANSACTION_TYPE || 'Unknown';
+      if (!tracking.transactionTypes.has(transactionType)) {
+        tracking.transactionTypes.set(transactionType, 0);
+      }
+      tracking.transactionTypes.set(transactionType, tracking.transactionTypes.get(transactionType) + 1);
+
+      // Alert on total count threshold (5 total events) - but only once per user-hour
+      if (tracking.totalCount >= 5 && !tracking.alerted) {
+        tracking.alerted = true; // Mark as alerted to prevent duplicate alerts
+        
+        // Create detailed breakdown for reporting
+        const typeBreakdown = Array.from(tracking.transactionTypes.entries())
+          .map(([type, count]) => `${type}: ${count}`)
+          .join(', ');
+
+        return {
+          customMessage: `Content transfer activity detected: ${tracking.totalCount} total transfers (${typeBreakdown})`,
+          severityMultiplier: 1.0
+        };
+      }
+
+      return null;
+    }
+  },
   Login: {
     description: "Multiple IP Logins",
     threshold: 3,
